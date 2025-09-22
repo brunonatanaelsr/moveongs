@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Declaracao e Recibo",
+  "type": "object",
+  "properties": {
+    "declaracao_comparecimento": {
+      "type": "object",
+      "properties": {
+        "cpf": {"type": "string"},
+        "paedi": {"type": "string"},
+        "local": {"type": "string"},
+        "data": {"type": "string", "format": "date"},
+        "hora_inicio": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+        "hora_fim": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+        "responsavel": {"type": "string"},
+        "observacoes": {"type": "string"}
+      },
+      "required": ["cpf", "paedi", "local", "data", "hora_inicio", "hora_fim", "responsavel"]
+    },
+    "recibo_beneficio": {
+      "type": "object",
+      "properties": {
+        "cpf": {"type": "string"},
+        "paedi": {"type": "string"},
+        "descricao_beneficio": {"type": "string"},
+        "valor": {"type": "number"},
+        "data": {"type": "string", "format": "date"},
+        "assinatura_beneficiaria": {"type": "string"},
+        "responsavel_registro": {"type": "string"}
+      },
+      "required": ["cpf", "paedi", "descricao_beneficio", "data", "responsavel_registro"]
+    },
+    "assinaturas": {
+      "type": "object",
+      "properties": {
+        "beneficiaria": {"type": "string"},
+        "tecnica": {"type": "string"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["declaracao_comparecimento", "recibo_beneficio"]
+}

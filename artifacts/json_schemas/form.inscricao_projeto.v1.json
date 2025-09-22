@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Inscricao em Projeto",
+  "type": "object",
+  "properties": {
+    "identificacao": {
+      "type": "object",
+      "properties": {
+        "nome": {"type": "string"},
+        "data_nascimento": {"type": "string", "format": "date"},
+        "idade": {"type": "integer", "minimum": 0},
+        "contato": {"type": "string"},
+        "codigo_matricula": {"type": "string"}
+      },
+      "required": ["nome"]
+    },
+    "projeto": {
+      "type": "object",
+      "properties": {
+        "nome": {"type": "string"},
+        "dia_semana": {"type": "string"},
+        "turno": {"type": "string", "enum": ["manha", "tarde", "noite", "integral"]},
+        "horario_inicio": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+        "horario_fim": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+        "educadora_responsavel": {"type": "string"}
+      },
+      "required": ["nome", "dia_semana", "turno"]
+    },
+    "acordos_convivencia": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slug": {"type": "string"},
+          "descricao": {"type": "string"},
+          "aceite": {"type": "boolean"}
+        },
+        "required": ["slug", "descricao", "aceite"]
+      }
+    },
+    "informacoes_saude": {
+      "type": "object",
+      "properties": {
+        "restricoes_alimentares": {"type": "string"},
+        "medicamentos": {"type": "string"},
+        "contato_emergencia": {"type": "string"}
+      }
+    },
+    "solicitacao_desligamento": {
+      "type": "object",
+      "properties": {
+        "solicitou": {"type": "boolean"},
+        "motivo": {"type": "string"},
+        "data": {"type": "string", "format": "date"},
+        "assinatura": {"type": "string"}
+      }
+    },
+    "assinaturas": {
+      "type": "object",
+      "properties": {
+        "beneficiaria": {"type": "string"},
+        "responsavel": {"type": "string"},
+        "tecnica": {"type": "string"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["identificacao", "projeto", "acordos_convivencia"]
+}

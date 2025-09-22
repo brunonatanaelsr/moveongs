@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Roda da Vida",
+  "type": "object",
+  "properties": {
+    "data": {"type": "string", "format": "date"},
+    "pontuacoes": {
+      "type": "object",
+      "properties": {
+        "qualidade_de_vida": {"type": "integer", "minimum": 1, "maximum": 10},
+        "felicidade": {"type": "integer", "minimum": 1, "maximum": 10},
+        "relacionamentos": {"type": "integer", "minimum": 1, "maximum": 10},
+        "profissional": {"type": "integer", "minimum": 1, "maximum": 10},
+        "lazer": {"type": "integer", "minimum": 1, "maximum": 10},
+        "espiritualidade": {"type": "integer", "minimum": 1, "maximum": 10},
+        "tempo_qualidade": {"type": "integer", "minimum": 1, "maximum": 10},
+        "saude": {"type": "integer", "minimum": 1, "maximum": 10},
+        "equilibrio_emocional": {"type": "integer", "minimum": 1, "maximum": 10},
+        "recursos_financeiros": {"type": "integer", "minimum": 1, "maximum": 10},
+        "carreira": {"type": "integer", "minimum": 1, "maximum": 10},
+        "contribuicao_social": {"type": "integer", "minimum": 1, "maximum": 10},
+        "familia": {"type": "integer", "minimum": 1, "maximum": 10},
+        "amor": {"type": "integer", "minimum": 1, "maximum": 10},
+        "vida_social": {"type": "integer", "minimum": 1, "maximum": 10}
+      },
+      "additionalProperties": false
+    },
+    "observacoes": {"type": "string"},
+    "assinaturas": {
+      "type": "object",
+      "properties": {
+        "beneficiaria": {"type": "string"},
+        "tecnica": {"type": "string"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["data", "pontuacoes"]
+}

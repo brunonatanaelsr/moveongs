@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plano de Acao Personalizado",
+  "type": "object",
+  "properties": {
+    "objetivo_principal": {"type": "string"},
+    "areas_prioritarias": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "acoes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "descricao": {"type": "string"},
+          "responsavel": {"type": "string"},
+          "prazo": {"type": "string", "format": "date"},
+          "status": {"type": "string", "enum": ["pendente", "em_andamento", "concluida", "cancelada"]},
+          "suporte_instituto": {"type": "string"},
+          "observacoes": {"type": "string"}
+        },
+        "required": ["descricao"]
+      }
+    },
+    "avaliacoes_semestrais": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "data": {"type": "string", "format": "date"},
+          "avaliacao": {"type": "string"},
+          "responsavel": {"type": "string"}
+        }
+      }
+    },
+    "assinaturas": {
+      "type": "object",
+      "properties": {
+        "beneficiaria": {"type": "string"},
+        "tecnica": {"type": "string"},
+        "coordenacao": {"type": "string"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["objetivo_principal", "areas_prioritarias", "acoes"]
+}

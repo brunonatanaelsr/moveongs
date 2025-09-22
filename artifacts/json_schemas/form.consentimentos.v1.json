@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Termos e Consentimentos",
+  "type": "object",
+  "properties": {
+    "dados_titular": {
+      "type": "object",
+      "properties": {
+        "nome": {"type": "string"},
+        "cpf": {"type": "string"},
+        "rg": {"type": "string"},
+        "data_nascimento": {"type": "string", "format": "date"},
+        "endereco": {"type": "string"},
+        "telefone": {"type": "string"}
+      },
+      "required": ["nome"]
+    },
+    "uso_imagem": {
+      "type": "object",
+      "properties": {
+        "autorizado": {"type": "boolean"},
+        "abrangencia": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "veiculos": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "observacoes": {"type": "string"}
+      }
+    },
+    "lgpd": {
+      "type": "object",
+      "properties": {
+        "finalidades": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "base_legal": {"type": "string"},
+        "prazo_retencao": {"type": "string"},
+        "direitos_titular": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "revogacao": {
+          "type": "object",
+          "properties": {
+            "pode_revogar": {"type": "boolean"},
+            "canal": {"type": "string"},
+            "observacoes": {"type": "string"}
+          }
+        }
+      }
+    },
+    "consentimentos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tipo": {"type": "string"},
+          "descricao": {"type": "string"},
+          "aceite": {"type": "boolean"}
+        },
+        "required": ["tipo", "descricao", "aceite"]
+      }
+    },
+    "responsaveis_legais": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nome": {"type": "string"},
+          "parentesco": {"type": "string"},
+          "assinatura": {"type": "string"}
+        },
+        "required": ["nome"]
+      }
+    },
+    "assinaturas": {
+      "type": "object",
+      "properties": {
+        "titular": {"type": "string"},
+        "representante": {"type": "string"},
+        "tecnica_referencia": {"type": "string"}
+      }
+    },
+    "metadados": {
+      "type": "object",
+      "properties": {
+        "ip": {"type": "string"},
+        "user_agent": {"type": "string"},
+        "registrado_em": {"type": "string", "format": "date-time"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["dados_titular", "consentimentos"]
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Visao Holistica",
+  "type": "object",
+  "properties": {
+    "historia_vida": {"type": "string"},
+    "rede_apoio": {"type": "string"},
+    "contexto_atual": {"type": "string"},
+    "avaliacao_tecnica": {"type": "string"},
+    "encaminhamento": {
+      "type": "object",
+      "properties": {
+        "projeto": {"type": "string"},
+        "data": {"type": "string", "format": "date"},
+        "responsavel": {"type": "string"},
+        "assinatura": {"type": "string"}
+      }
+    },
+    "anexos": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["historia_vida", "rede_apoio", "avaliacao_tecnica"]
+}
