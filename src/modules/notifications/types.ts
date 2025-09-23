@@ -26,6 +26,24 @@ export type AttendanceRecordedEvent = {
   };
 };
 
+export type AttendanceLowAttendanceEvent = {
+  type: 'attendance.low_attendance';
+  triggeredAt?: string;
+  data: {
+    enrollmentId: string;
+    beneficiaryId: string;
+    beneficiaryName: string;
+    cohortId: string;
+    cohortCode: string | null;
+    projectId: string;
+    projectName: string;
+    attendanceRate: number;
+    threshold: number;
+    totalSessions: number;
+    presentSessions: number;
+  };
+};
+
 export type ConsentRecordedEvent = {
   type: 'consent.recorded';
   triggeredAt?: string;
@@ -57,6 +75,7 @@ export type ConsentUpdatedEvent = {
 export type NotificationEvent =
   | EnrollmentCreatedEvent
   | AttendanceRecordedEvent
+  | AttendanceLowAttendanceEvent
   | ConsentRecordedEvent
   | ConsentUpdatedEvent;
 

@@ -208,6 +208,21 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): { subject: st
           event.data.justification ? `Justificativa: ${event.data.justification}` : null,
         ].filter(Boolean).join('\n'),
       };
+    case 'attendance.low_attendance': {
+      const ratePercent = (event.data.attendanceRate * 100).toFixed(1);
+      const thresholdPercent = (event.data.threshold * 100).toFixed(0);
+      return {
+        subject: `Alerta de baixa assiduidade - ${event.data.beneficiaryName}`,
+        body: [
+          `A matrícula ${event.data.enrollmentId} está com assiduidade de ${ratePercent}%.`,
+          `Projeto: ${event.data.projectName}`,
+          event.data.cohortCode ? `Turma: ${event.data.cohortCode}` : null,
+          `Total de encontros: ${event.data.totalSessions}`,
+          `Presenças: ${event.data.presentSessions}`,
+          `Limite mínimo: ${thresholdPercent}%`,
+        ].filter(Boolean).join('\n'),
+      };
+    }
     case 'consent.recorded':
       return {
         subject: `Novo consentimento (${event.data.type})`,
@@ -239,6 +254,11 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
       return `Nova matrícula: ${event.data.beneficiaryName} no projeto ${event.data.projectName}`;
     case 'attendance.recorded':
       return `Presença registrada (${event.data.present ? 'presente' : 'ausente'}) em ${event.data.date}.`;
+    case 'attendance.low_attendance': {
+      const ratePercent = Math.round(event.data.attendanceRate * 100);
+      const thresholdPercent = Math.round(event.data.threshold * 100);
+      return `Alerta: ${event.data.beneficiaryName} com assiduidade de ${ratePercent}% (mínimo ${thresholdPercent}%).`;
+    }
     case 'consent.recorded':
       return `Consentimento ${event.data.type} registrado para beneficiário ${event.data.beneficiaryId}.`;
     case 'consent.updated':
