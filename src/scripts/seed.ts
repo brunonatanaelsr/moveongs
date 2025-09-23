@@ -41,7 +41,9 @@ const RESOURCE_SEED = [
   { slug: 'analytics', description: 'Relatórios e analytics' },
   { slug: 'consents', description: 'Termos e consentimentos LGPD/Imagem' },
   { slug: 'attachments', description: 'Anexos e arquivos enviados' },
-  { slug: 'audit_logs', description: 'Trilha de auditoria' }
+  { slug: 'audit_logs', description: 'Trilha de auditoria' },
+  { slug: 'evolutions', description: 'Registros de evolução/atendimentos' },
+  { slug: 'action_plans', description: 'Planos de ação e tarefas' }
 ];
 
 const PERMISSION_SEED = [
@@ -95,7 +97,14 @@ const PERMISSION_SEED = [
   { resource: 'attachments', action: 'read', scope: 'global', description: 'Visualizar anexos' },
   { resource: 'attachments', action: 'delete', scope: 'global', description: 'Remover anexos' },
 
-  { resource: 'audit_logs', action: 'read', scope: 'global', description: 'Consultar trilha de auditoria' }
+  { resource: 'audit_logs', action: 'read', scope: 'global', description: 'Consultar trilha de auditoria' },
+
+  { resource: 'evolutions', action: 'create', scope: 'global', description: 'Registrar evolução/atendimento' },
+  { resource: 'evolutions', action: 'read', scope: 'global', description: 'Consultar evoluções' },
+
+  { resource: 'action_plans', action: 'create', scope: 'global', description: 'Criar plano de ação' },
+  { resource: 'action_plans', action: 'read', scope: 'global', description: 'Consultar planos de ação' },
+  { resource: 'action_plans', action: 'update', scope: 'global', description: 'Atualizar plano de ação' }
 ];
 
 const ROLE_PERMISSION_MAP: Record<string, string[]> = {
@@ -132,7 +141,12 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'attachments:upload',
     'attachments:read',
     'attachments:delete',
-    'audit_logs:read'
+    'audit_logs:read',
+    'evolutions:create',
+    'evolutions:read',
+    'action_plans:create',
+    'action_plans:read',
+    'action_plans:update'
   ],
   tecnica: [
     'beneficiaries:read',
@@ -153,7 +167,12 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'consents:read',
     'consents:update',
     'attachments:upload',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:create',
+    'evolutions:read',
+    'action_plans:create',
+    'action_plans:read',
+    'action_plans:update'
   ],
   educadora: [
     'beneficiaries:read',
@@ -167,7 +186,11 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'activities:read',
     'analytics:read:project',
     'attachments:upload',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:create',
+    'evolutions:read',
+    'action_plans:read',
+    'action_plans:update'
   ],
   recepcao: [
     'beneficiaries:create',
@@ -177,28 +200,38 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'consents:create',
     'consents:read',
     'attachments:upload',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:create',
+    'evolutions:read',
+    'action_plans:create',
+    'action_plans:read'
   ],
   financeiro: [
     'beneficiaries:read',
     'form_submissions:read',
     'projects:read',
     'profiles:read',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:read',
+    'action_plans:read'
   ],
   voluntaria: [
     'beneficiaries:read',
     'form_submissions:read',
     'profiles:read',
     'activities:read',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:read',
+    'action_plans:read'
   ],
   leitura_externa: [
     'beneficiaries:read',
     'form_submissions:read',
     'projects:read',
     'profiles:read',
-    'attachments:read'
+    'attachments:read',
+    'evolutions:read',
+    'action_plans:read'
   ],
   beneficiaria: [
     'beneficiaries:read:own',
@@ -208,7 +241,9 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'enrollments:read:own',
     'activities:create',
     'activities:read',
-    'consents:read:own'
+    'consents:read:own',
+    'evolutions:read',
+    'action_plans:read'
   ],
 };
 

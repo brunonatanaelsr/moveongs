@@ -12,6 +12,9 @@ import { formRoutes } from './forms/routes';
 import { consentRoutes } from './consents/routes';
 import { attachmentRoutes } from './attachments/routes';
 import { auditRoutes } from './audit/routes';
+import { evolutionRoutes } from './evolutions/routes';
+import { actionPlanRoutes } from './action-plans/routes';
+import { timelineRoutes } from './timeline/routes';
 
 export async function registerModules(app: FastifyInstance) {
   await registerAuthDecorators(app);
@@ -27,4 +30,7 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(consentRoutes);
   await app.register(attachmentRoutes);
   await app.register(auditRoutes);
+  await app.register(evolutionRoutes);
+  await app.register(actionPlanRoutes);
+  await app.register(timelineRoutes);
 }

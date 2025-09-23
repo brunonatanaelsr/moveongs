@@ -20,7 +20,7 @@ const { mem, adapter } = vi.hoisted(() => {
   process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-imm-123456789012345678901234567890';
   process.env.JWT_EXPIRES_IN = '1h';
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';
-  process.env.LOG_LEVEL = 'silent';
+  process.env.LOG_LEVEL = 'debug';
   return { mem: db, adapter };
 });
 
@@ -507,5 +507,161 @@ describe('IMM API basics', () => {
 
     expect(auditAttachmentLogs.statusCode).toBe(200);
     expect(auditAttachmentLogs.json().data.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('manages action plans, evolutions and timeline', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
+        email: 'admin@imm.local',
+        password: 'ChangeMe123!',
+      },
+    });
+
+    expect(login.statusCode).toBe(200);
+    const { token } = login.json();
+
+    let beneficiaryId = seededBeneficiaryId;
+
+    if (!beneficiaryId) {
+      const beneficiaryResponse = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          fullName: 'Beneficiária Plano Teste',
+          birthDate: '1992-02-10',
+          vulnerabilities: [],
+          householdMembers: [],
+        },
+      });
+
+      if (beneficiaryResponse.statusCode !== 201) {
+        // eslint-disable-next-line no-console
+        console.log('beneficiary create error', beneficiaryResponse.json());
+      }
+
+      expect(beneficiaryResponse.statusCode).toBe(201);
+      beneficiaryId = beneficiaryResponse.json().beneficiary.id as string;
+      seededBeneficiaryId = beneficiaryId;
+    }
+
+    const planResponse = await app.inject({
+      method: 'POST',
+      url: '/action-plans',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        beneficiaryId,
+      },
+    });
+
+    expect(planResponse.statusCode).toBe(201);
+    const { plan: createdPlan } = planResponse.json();
+    expect(createdPlan).toMatchObject({ beneficiaryId, status: 'active' });
+
+    const addItemResponse = await app.inject({
+      method: 'POST',
+      url: `/action-plans/${createdPlan.id}/items`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        title: 'Realizar visita domiciliar',
+        responsible: 'Técnica IMM',
+        dueDate: '2025-10-01',
+        notes: 'Verificar documentação',
+      },
+    });
+
+    expect(addItemResponse.statusCode).toBe(201);
+    const planAfterItemResponse = await app.inject({
+      method: 'GET',
+      url: `/action-plans/${createdPlan.id}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(planAfterItemResponse.statusCode).toBe(200);
+    const planWithItem = planAfterItemResponse.json().plan;
+    expect(planWithItem.items).toHaveLength(1);
+    const itemId = planWithItem.items[0].id as string;
+
+    const updateItemResponse = await app.inject({
+      method: 'PATCH',
+      url: `/action-plans/${createdPlan.id}/items/${itemId}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        status: 'in_progress',
+        support: 'Assistência jurídica',
+      },
+    });
+
+    expect(updateItemResponse.statusCode).toBe(200);
+    expect(updateItemResponse.json().plan.items[0]).toMatchObject({
+      id: itemId,
+      status: 'in_progress',
+      support: 'Assistência jurídica',
+    });
+
+    const listPlansResponse = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/action-plans`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(listPlansResponse.statusCode).toBe(200);
+    expect(listPlansResponse.json().data[0].items).toHaveLength(1);
+
+    const summaryResponse = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/action-items/summary?status=in_progress`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(summaryResponse.statusCode).toBe(200);
+    expect(summaryResponse.json().data[0]).toMatchObject({ id: itemId, status: 'in_progress' });
+
+    const evolutionResponse = await app.inject({
+      method: 'POST',
+      url: `/beneficiaries/${beneficiaryId}/evolutions`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        date: '2025-09-01',
+        description: 'Atendimento psicossocial inicial',
+        category: 'psicossocial',
+        responsible: 'Técnica IMM',
+      },
+    });
+
+    expect(evolutionResponse.statusCode).toBe(201);
+
+    const timelineResponse = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/timeline`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(timelineResponse.statusCode).toBe(200);
+    const timeline = timelineResponse.json().data;
+    expect(timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'action_item', metadata: expect.objectContaining({ actionPlanId: createdPlan.id }) }),
+      expect.objectContaining({ kind: 'evolution', description: 'Atendimento psicossocial inicial' }),
+    ]));
   });
 });

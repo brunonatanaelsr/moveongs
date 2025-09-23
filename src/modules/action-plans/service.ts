@@ -1,0 +1,181 @@
+import { recordAuditLog } from '../../shared/audit';
+import { AppError } from '../../shared/errors';
+import {
+  ActionPlanRecord,
+  ActionItemRecord,
+  createActionItem as createActionItemRepository,
+  createActionPlan as createActionPlanRepository,
+  getActionItemById,
+  getActionPlan,
+  listActionItemsForBeneficiary,
+  listActionPlans,
+  updateActionItem as updateActionItemRepository,
+  updateActionPlan as updateActionPlanRepository,
+} from './repository';
+
+export async function createActionPlan(params: {
+  beneficiaryId: string;
+  status?: string;
+  userId?: string | null;
+}): Promise<ActionPlanRecord> {
+  const plan = await createActionPlanRepository({
+    beneficiaryId: params.beneficiaryId,
+    status: params.status,
+    createdBy: params.userId ?? null,
+  });
+
+  await recordAuditLog({
+    userId: params.userId ?? null,
+    entity: 'action_plan',
+    entityId: plan.id,
+    action: 'create',
+    beforeData: null,
+    afterData: plan,
+  });
+
+  return plan;
+}
+
+export async function updateActionPlan(id: string, params: {
+  status?: string;
+  userId?: string | null;
+}): Promise<ActionPlanRecord> {
+  if (!params.status) {
+    throw new AppError('Nothing to update', 400);
+  }
+
+  const before = await getActionPlan(id);
+  if (!before) {
+    throw new AppError('Action plan not found', 404);
+  }
+
+  const plan = await updateActionPlanRepository(id, { status: params.status });
+
+  await recordAuditLog({
+    userId: params.userId ?? null,
+    entity: 'action_plan',
+    entityId: plan.id,
+    action: 'update',
+    beforeData: before,
+    afterData: plan,
+  });
+
+  return plan;
+}
+
+export async function getActionPlanOrFail(id: string): Promise<ActionPlanRecord> {
+  const plan = await getActionPlan(id);
+  if (!plan) {
+    throw new AppError('Action plan not found', 404);
+  }
+  return plan;
+}
+
+export async function listActionPlansForBeneficiary(params: {
+  beneficiaryId: string;
+  status?: string;
+}): Promise<ActionPlanRecord[]> {
+  return listActionPlans(params);
+}
+
+export async function addActionItem(params: {
+  actionPlanId: string;
+  title: string;
+  responsible?: string | null;
+  dueDate?: string | null;
+  status?: string;
+  support?: string | null;
+  notes?: string | null;
+  userId?: string | null;
+}): Promise<ActionPlanRecord> {
+  const dueDate = params.dueDate ? new Date(params.dueDate) : null;
+  if (dueDate && Number.isNaN(dueDate.getTime())) {
+    throw new AppError('Invalid dueDate', 400);
+  }
+
+  const plan = await createActionItemRepository({
+    actionPlanId: params.actionPlanId,
+    title: params.title,
+    responsible: params.responsible ?? null,
+    dueDate,
+    status: params.status,
+    support: params.support ?? null,
+    notes: params.notes ?? null,
+  });
+
+  await recordAuditLog({
+    userId: params.userId ?? null,
+    entity: 'action_plan',
+    entityId: plan.id,
+    action: 'add_item',
+    beforeData: null,
+    afterData: plan,
+  });
+
+  return plan;
+}
+
+export async function updateActionItem(params: {
+  actionPlanId: string;
+  itemId: string;
+  title?: string;
+  responsible?: string | null;
+  dueDate?: string | null;
+  status?: string;
+  support?: string | null;
+  notes?: string | null;
+  completedAt?: string | null;
+  userId?: string | null;
+}): Promise<ActionPlanRecord> {
+  const dueDate = params.dueDate ? new Date(params.dueDate) : undefined;
+  if (dueDate && Number.isNaN(dueDate.getTime())) {
+    throw new AppError('Invalid dueDate', 400);
+  }
+
+  const completedAt = params.completedAt ? new Date(params.completedAt) : undefined;
+  if (completedAt && Number.isNaN(completedAt.getTime())) {
+    throw new AppError('Invalid completedAt', 400);
+  }
+
+  const itemBefore = await getActionItemById(params.itemId);
+  if (!itemBefore) {
+    throw new AppError('Action item not found', 404);
+  }
+
+  const plan = await updateActionItemRepository({
+    actionPlanId: params.actionPlanId,
+    itemId: params.itemId,
+    title: params.title,
+    responsible: params.responsible ?? null,
+    dueDate: dueDate ?? null,
+    status: params.status,
+    support: params.support ?? null,
+    notes: params.notes ?? null,
+    completedAt: completedAt ?? null,
+  });
+
+  await recordAuditLog({
+    userId: params.userId ?? null,
+    entity: 'action_plan',
+    entityId: plan.id,
+    action: 'update_item',
+    beforeData: itemBefore,
+    afterData: plan.items.find((item) => item.id === params.itemId) ?? null,
+  });
+
+  return plan;
+}
+
+export async function listActionItemsSummary(params: {
+  beneficiaryId: string;
+  status?: string;
+  dueBefore?: string;
+}): Promise<ActionItemRecord[]> {
+  const dueBefore = params.dueBefore ? new Date(params.dueBefore) : undefined;
+
+  return listActionItemsForBeneficiary({
+    beneficiaryId: params.beneficiaryId,
+    status: params.status,
+    dueBefore: dueBefore && !Number.isNaN(dueBefore.getTime()) ? dueBefore : undefined,
+  });
+}
