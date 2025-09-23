@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import type { NotificationEvent } from './types';
 
-const eventTypes = ['enrollment.created', 'attendance.recorded', 'consent.recorded', 'consent.updated'] as const satisfies NotificationEvent['type'][];
+const eventTypes = [
+  'enrollment.created',
+  'attendance.recorded',
+  'attendance.low_attendance',
+  'consent.recorded',
+  'consent.updated',
+] as const satisfies NotificationEvent['type'][];
 
 export const createWebhookSchema = z.object({
   event: z.enum(eventTypes),

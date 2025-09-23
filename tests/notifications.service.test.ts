@@ -96,5 +96,50 @@ describe('notification service', () => {
       method: 'POST',
     }));
   });
+
+  it('dispara alertas de risco de assiduidade em múltiplos canais', async () => {
+    addWebhookSubscription({
+      event: 'attendance.low_attendance',
+      url: 'https://example.org/hooks/attendance-risk',
+    });
+
+    publishNotificationEvent({
+      type: 'attendance.low_attendance',
+      data: {
+        enrollmentId: 'enr-42',
+        beneficiaryId: 'ben-99',
+        beneficiaryName: 'Joana de Teste',
+        cohortId: 'cohort-2',
+        cohortCode: 'TURMA-B',
+        projectId: 'proj-7',
+        projectName: 'Projeto Exemplo',
+        attendanceRate: 0.6,
+        threshold: 0.75,
+        totalSessions: 10,
+        presentSessions: 6,
+      },
+    });
+
+    await waitForNotificationQueue();
+
+    const emails = getEmailDispatchHistory();
+    const whatsappMessages = getWhatsappDispatchHistory();
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({
+      recipients: ['alerts@example.com'],
+      eventType: 'attendance.low_attendance',
+    });
+
+    expect(whatsappMessages).toHaveLength(1);
+    expect(whatsappMessages[0]).toMatchObject({
+      numbers: ['+5511999999999'],
+      eventType: 'attendance.low_attendance',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.org/hooks/attendance-risk', expect.objectContaining({
+      method: 'POST',
+    }));
+  });
 });
 
