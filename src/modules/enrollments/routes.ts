@@ -91,7 +91,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
-    const attendance = await recordAttendance({
+    const result = await recordAttendance({
       enrollmentId: parsedParams.data.id,
       date: parsedBody.data.date,
       present: parsedBody.data.present,
@@ -99,7 +99,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       recordedBy: request.user?.sub,
     });
 
-    return reply.code(201).send({ attendance });
+    return reply.code(201).send(result);
   });
 
   app.get('/enrollments/:id/attendance', {

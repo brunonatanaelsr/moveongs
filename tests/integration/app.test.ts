@@ -573,7 +573,7 @@ describe('IMM API basics', () => {
       payload: {
         title: 'Realizar visita domiciliar',
         responsible: 'Técnica IMM',
-        dueDate: '2025-10-01',
+        dueDate: '2020-01-01',
         notes: 'Verificar documentação',
       },
     });
@@ -599,6 +599,7 @@ describe('IMM API basics', () => {
         authorization: `Bearer ${token}`,
       },
       payload: {
+        dueDate: '2020-01-01',
         status: 'in_progress',
         support: 'Assistência jurídica',
       },
@@ -659,9 +660,65 @@ describe('IMM API basics', () => {
 
     expect(timelineResponse.statusCode).toBe(200);
     const timeline = timelineResponse.json().data;
+    const overdueBanner = timeline.find((entry: any) => entry.kind === 'system_alert' && entry.metadata?.alertType === 'action_plan_overdue');
+    expect(overdueBanner).toMatchObject({
+      status: 'alert',
+      metadata: expect.objectContaining({
+        overdueCount: 1,
+        itemIds: expect.arrayContaining([itemId]),
+      }),
+    });
+
+    const overdueItemEntry = timeline.find((entry: any) => entry.kind === 'action_item' && entry.id === itemId);
+    expect(overdueItemEntry).toMatchObject({
+      status: 'overdue',
+      metadata: expect.objectContaining({
+        actionPlanId: createdPlan.id,
+        isOverdue: true,
+        originalStatus: 'in_progress',
+      }),
+    });
+
     expect(timeline).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'action_item', metadata: expect.objectContaining({ actionPlanId: createdPlan.id }) }),
       expect.objectContaining({ kind: 'evolution', description: 'Atendimento psicossocial inicial' }),
     ]));
+
+    const completeItemResponse = await app.inject({
+      method: 'PATCH',
+      url: `/action-plans/${createdPlan.id}/items/${itemId}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        status: 'done',
+        completedAt: '2020-02-20',
+      },
+    });
+
+    expect(completeItemResponse.statusCode).toBe(200);
+
+    const timelineAfterCompletionResponse = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/timeline`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(timelineAfterCompletionResponse.statusCode).toBe(200);
+    const timelineAfterCompletion = timelineAfterCompletionResponse.json().data;
+    const bannerAfterCompletion = timelineAfterCompletion.find((entry: any) => entry.kind === 'system_alert' && entry.metadata?.alertType === 'action_plan_overdue');
+    expect(bannerAfterCompletion).toBeUndefined();
+
+    const completedItemEntry = timelineAfterCompletion.find((entry: any) => entry.kind === 'action_item' && entry.id === itemId);
+    expect(completedItemEntry).toMatchObject({
+      status: 'done',
+      metadata: expect.objectContaining({
+        isCompleted: true,
+        originalStatus: 'done',
+        isOverdue: false,
+      }),
+    });
   });
 });

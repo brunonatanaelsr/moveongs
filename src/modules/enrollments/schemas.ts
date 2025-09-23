@@ -30,11 +30,24 @@ export const listEnrollmentQuerySchema = z.object({
   offset: z.coerce.number().optional(),
 });
 
-export const recordAttendanceBodySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  present: z.boolean(),
-  justification: z.string().optional().nullable(),
-});
+export const recordAttendanceBodySchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    present: z.boolean(),
+    justification: z.string().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.present) {
+      const justification = data.justification?.trim() ?? '';
+      if (justification.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['justification'],
+          message: 'Justificativa obrigatória quando marcar ausência',
+        });
+      }
+    }
+  });
 
 export const attendanceQuerySchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

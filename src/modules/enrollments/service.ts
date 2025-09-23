@@ -3,11 +3,35 @@ import {
   AttendanceRecord,
   EnrollmentRecord,
   createEnrollment as createEnrollmentRepository,
+  getEnrollmentById,
   listAttendance,
   listEnrollments as listEnrollmentsRepository,
   upsertAttendance,
   updateEnrollment as updateEnrollmentRepository,
 } from './repository';
+import { publishNotificationEvent } from '../notifications/service';
+
+export const ATTENDANCE_MINIMUM_RATE = 0.75;
+
+type AttendanceRiskStatus = 'ok' | 'risk';
+
+export type AttendanceSummary = {
+  totalSessions: number;
+  presentSessions: number;
+  attendanceRate: number | null;
+};
+
+export type RecordAttendanceResult = {
+  attendance: AttendanceRecord;
+  summary: AttendanceSummary;
+  risk: {
+    status: AttendanceRiskStatus;
+    threshold: number;
+    attendanceRate: number | null;
+    totalSessions: number;
+    presentSessions: number;
+  };
+};
 
 export async function createEnrollment(input: {
   beneficiaryId: string;
@@ -16,7 +40,24 @@ export async function createEnrollment(input: {
   status?: string;
   agreementAcceptance?: Record<string, unknown> | null;
 }): Promise<EnrollmentRecord> {
-  return createEnrollmentRepository(input);
+  const enrollment = await createEnrollmentRepository(input);
+
+  publishNotificationEvent({
+    type: 'enrollment.created',
+    data: {
+      enrollmentId: enrollment.id,
+      beneficiaryId: enrollment.beneficiaryId,
+      beneficiaryName: enrollment.beneficiaryName,
+      cohortId: enrollment.cohortId,
+      cohortCode: enrollment.cohortCode,
+      projectId: enrollment.projectId,
+      projectName: enrollment.projectName,
+      status: enrollment.status,
+      enrolledAt: enrollment.enrolledAt,
+    },
+  });
+
+  return enrollment;
 }
 
 export async function updateEnrollment(id: string, input: {
@@ -64,8 +105,75 @@ export async function recordAttendance(input: {
   present: boolean;
   justification?: string | null;
   recordedBy?: string | null;
-}): Promise<AttendanceRecord> {
-  return upsertAttendance(input);
+}): Promise<RecordAttendanceResult> {
+  const trimmedJustification =
+    typeof input.justification === 'string' ? input.justification.trim() : null;
+  const normalizedJustification = trimmedJustification && trimmedJustification.length > 0
+    ? trimmedJustification
+    : null;
+
+  if (!input.present && !normalizedJustification) {
+    throw new AppError('Justification is required when marking an absence');
+  }
+
+  const attendance = await upsertAttendance({
+    enrollmentId: input.enrollmentId,
+    date: input.date,
+    present: input.present,
+    justification: normalizedJustification,
+    recordedBy: input.recordedBy,
+  });
+
+  publishNotificationEvent({
+    type: 'attendance.recorded',
+    data: {
+      attendanceId: attendance.id,
+      enrollmentId: attendance.enrollmentId,
+      date: attendance.date,
+      present: attendance.present,
+      justification: attendance.justification,
+    },
+  });
+
+  const enrollment = await getEnrollmentById(attendance.enrollmentId);
+  if (!enrollment) {
+    throw new AppError('Failed to load enrollment after recording attendance', 500);
+  }
+
+  const summary = enrollment.attendance;
+  const attendanceRate = summary.attendanceRate;
+  const isRisk = attendanceRate !== null && attendanceRate < ATTENDANCE_MINIMUM_RATE;
+
+  if (isRisk && attendanceRate !== null) {
+    publishNotificationEvent({
+      type: 'attendance.low_attendance',
+      data: {
+        enrollmentId: enrollment.id,
+        beneficiaryId: enrollment.beneficiaryId,
+        beneficiaryName: enrollment.beneficiaryName,
+        cohortId: enrollment.cohortId,
+        cohortCode: enrollment.cohortCode,
+        projectId: enrollment.projectId,
+        projectName: enrollment.projectName,
+        attendanceRate,
+        threshold: ATTENDANCE_MINIMUM_RATE,
+        totalSessions: summary.totalSessions,
+        presentSessions: summary.presentSessions,
+      },
+    });
+  }
+
+  return {
+    attendance,
+    summary,
+    risk: {
+      status: isRisk ? 'risk' : 'ok',
+      threshold: ATTENDANCE_MINIMUM_RATE,
+      attendanceRate,
+      totalSessions: summary.totalSessions,
+      presentSessions: summary.presentSessions,
+    },
+  };
 }
 
 export async function getAttendance(params: {
