@@ -7,6 +7,7 @@ import {
   listConsentsByBeneficiary,
   updateConsent,
 } from './repository';
+import { publishNotificationEvent } from '../notifications/service';
 
 export async function listConsents(params: {
   beneficiaryId: string;
@@ -49,6 +50,19 @@ export async function registerConsent(params: {
     action: 'create',
     beforeData: null,
     afterData: consent,
+  });
+
+  publishNotificationEvent({
+    type: 'consent.recorded',
+    data: {
+      consentId: consent.id,
+      beneficiaryId: consent.beneficiaryId,
+      type: consent.type,
+      textVersion: consent.textVersion,
+      granted: consent.granted,
+      grantedAt: consent.grantedAt,
+      revokedAt: consent.revokedAt,
+    },
   });
 
   return consent;
@@ -115,6 +129,19 @@ export async function updateExistingConsent(id: string, params: {
     action: 'update',
     beforeData: before,
     afterData: updated,
+  });
+
+  publishNotificationEvent({
+    type: 'consent.updated',
+    data: {
+      consentId: updated.id,
+      beneficiaryId: updated.beneficiaryId,
+      type: updated.type,
+      textVersion: updated.textVersion,
+      granted: updated.granted,
+      grantedAt: updated.grantedAt,
+      revokedAt: updated.revokedAt,
+    },
   });
 
   return updated;
