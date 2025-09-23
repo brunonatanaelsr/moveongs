@@ -16,6 +16,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const roles = user.roles.map((role) => role.slug);
     const projectScopes = Array.from(new Set(user.roles.map((role) => role.projectId).filter(Boolean))) as string[];
+    const permissionKeys = user.permissions.map((permission) => permission.key);
 
     const token = app.jwt.sign({
       sub: user.id,
@@ -23,6 +24,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       name: user.name,
       roles,
       projectScopes,
+      permissions: permissionKeys,
     });
 
     return reply.send({
@@ -32,6 +34,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         name: user.name,
         email: user.email,
         roles: user.roles,
+        permissions: user.permissions,
       },
     });
   });

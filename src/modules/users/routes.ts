@@ -21,6 +21,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       email: user.email,
       isActive: user.isActive,
       roles: user.roles,
+      permissions: user.permissions,
       createdAt: user.createdAt,
     });
   });

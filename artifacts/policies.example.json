@@ -1,0 +1,176 @@
+{
+  "$schema": "https://imm.example/schemas/policy.json",
+  "version": "0.3.0",
+  "notes": "Example policy map used by the IMM front-end and back-end guards.",
+  "resources": {
+    "beneficiaries": {
+      "actions": [
+        "create",
+        "read",
+        "update",
+        "delete"
+      ],
+      "scopes": [
+        "global",
+        "project"
+      ]
+    },
+    "form_submissions": {
+      "actions": [
+        "create",
+        "read",
+        "update",
+        "delete"
+      ],
+      "scopes": [
+        "global",
+        "project",
+        "own"
+      ]
+    },
+    "projects": {
+      "actions": [
+        "create",
+        "read",
+        "update",
+        "archive"
+      ],
+      "scopes": [
+        "global"
+      ]
+    },
+    "cohorts": {
+      "actions": [
+        "create",
+        "read",
+        "update"
+      ],
+      "scopes": [
+        "project"
+      ]
+    },
+    "enrollments": {
+      "actions": [
+        "create",
+        "read",
+        "update",
+        "attendance"
+      ],
+      "scopes": [
+        "project",
+        "own"
+      ]
+    },
+    "profiles": {
+      "actions": [
+        "read",
+        "update"
+      ],
+      "scopes": [
+        "own",
+        "global"
+      ]
+    },
+    "activities": {
+      "actions": [
+        "create",
+        "read",
+        "moderate"
+      ],
+      "scopes": [
+        "global",
+        "project"
+      ]
+    },
+    "analytics": {
+      "actions": [
+        "read",
+        "export"
+      ],
+      "scopes": [
+        "global",
+        "project"
+      ]
+    }
+  },
+  "roleDefaults": {
+    "admin": [
+      "*",
+      "analytics:read",
+      "analytics:export"
+    ],
+    "coordenacao": [
+      "beneficiaries:create",
+      "beneficiaries:read",
+      "beneficiaries:update",
+      "form_submissions:create",
+      "form_submissions:read",
+      "form_submissions:update",
+      "projects:create",
+      "projects:read",
+      "projects:update",
+      "cohorts:create",
+      "cohorts:read",
+      "cohorts:update",
+      "enrollments:create",
+      "enrollments:read",
+      "enrollments:update",
+      "enrollments:attendance",
+      "profiles:read",
+      "profiles:update",
+      "activities:read",
+      "activities:moderate",
+      "analytics:read"
+    ],
+    "tecnica": [
+      "beneficiaries:read",
+      "beneficiaries:update",
+      "form_submissions:create",
+      "form_submissions:read",
+      "form_submissions:update",
+      "enrollments:read",
+      "enrollments:update",
+      "enrollments:attendance",
+      "profiles:read",
+      "activities:create",
+      "activities:read",
+      "analytics:read"
+    ],
+    "educadora": [
+      "beneficiaries:read",
+      "form_submissions:create",
+      "form_submissions:read",
+      "enrollments:attendance",
+      "profiles:read",
+      "activities:create",
+      "activities:read",
+      "analytics:read:project"
+    ],
+    "recepcao": [
+      "beneficiaries:create",
+      "beneficiaries:read",
+      "form_submissions:create",
+      "form_submissions:read"
+    ],
+    "financeiro": [
+      "beneficiaries:read",
+      "form_submissions:read",
+      "projects:read",
+      "profiles:read"
+    ],
+    "voluntaria": [
+      "beneficiaries:read",
+      "form_submissions:read",
+      "profiles:read",
+      "activities:read"
+    ],
+    "beneficiaria": [
+      "beneficiaries:read:own",
+      "form_submissions:read:own",
+      "profiles:read:own",
+      "profiles:update:own",
+      "activities:create",
+      "activities:read"
+    ]
+  }
+}

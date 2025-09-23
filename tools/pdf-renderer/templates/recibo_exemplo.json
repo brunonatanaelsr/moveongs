@@ -1,0 +1,20 @@
+{
+  "recibo": {
+    "numero": "2024-IMM-045"
+  },
+  "beneficiaria": {
+    "nome": "Maria das Graças Silva",
+    "cpf": "123.456.789-00",
+    "projeto": "Mulheres em Movimento"
+  },
+  "beneficio": {
+    "descricao": "Cesta básica + vale transporte",
+    "valor": "250,00",
+    "data": "2024-07-12"
+  },
+  "responsavel": {
+    "nome": "Ana Paula – Coordenação",
+    "cargo": "Coordenação Técnica",
+    "data": "2024-07-12"
+  }
+}

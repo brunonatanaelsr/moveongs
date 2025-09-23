@@ -1,12 +1,13 @@
 import { compare } from 'bcryptjs';
 import { UnauthorizedError } from '../../shared/errors';
-import { getUserByEmailWithPassword } from '../users/repository';
+import { getUserByEmailWithPassword, type PermissionGrant } from '../users/repository';
 
 export type AuthenticatedUser = {
   id: string;
   name: string;
   email: string;
   roles: { slug: string; projectId?: string | null }[];
+  permissions: PermissionGrant[];
 };
 
 export async function validateCredentials(email: string, password: string): Promise<AuthenticatedUser> {
@@ -27,5 +28,6 @@ export async function validateCredentials(email: string, password: string): Prom
     name: user.name,
     email: user.email,
     roles: user.roles,
+    permissions: user.permissions,
   };
 }

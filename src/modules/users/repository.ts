@@ -1,10 +1,17 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResult } from 'pg';
 import { query, withTransaction } from '../../db';
 import { AppError } from '../../shared/errors';
 
 export type RoleAssignment = {
   slug: string;
   projectId?: string | null;
+};
+
+export type PermissionGrant = {
+  key: string;
+  resource: string;
+  action: string;
+  scope: string;
 };
 
 export type UserRecord = {
@@ -15,6 +22,7 @@ export type UserRecord = {
   createdAt: Date;
   updatedAt: Date;
   roles: RoleAssignment[];
+  permissions: PermissionGrant[];
 };
 
 export type UserAuthRecord = {
@@ -24,6 +32,7 @@ export type UserAuthRecord = {
   passwordHash: string;
   isActive: boolean;
   roles: RoleAssignment[];
+  permissions: PermissionGrant[];
 };
 
 async function loadRoleIds(client: PoolClient, roleSlugs: string[]) {
@@ -45,6 +54,52 @@ async function loadRoleIds(client: PoolClient, roleSlugs: string[]) {
 
   return new Map(rows.map((row) => [row.slug, row.id] as const));
 }
+
+function buildPermissionKey(resource: string, action: string, scope: string) {
+  return scope === 'global' ? `${resource}:${action}` : `${resource}:${action}:${scope}`;
+}
+
+async function fetchPermissions(client: PoolClient | null, userIds: string[]): Promise<Map<string, PermissionGrant[]>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = userIds.map((_, index) => `$${index + 1}`).join(', ');
+  const sql = `select distinct ur.user_id,
+            res.slug as resource_slug,
+            perm.action,
+            perm.scope
+       from user_roles ur
+       join role_permissions rp on rp.role_id = ur.role_id
+       join permissions perm on perm.id = rp.permission_id
+       join resources res on res.id = perm.resource_id
+      where ur.user_id in (${placeholders})`;
+
+  const values = userIds;
+  const result = client
+    ? await client.query<{ user_id: string; resource_slug: string; action: string; scope: string }>(sql, values)
+    : await query<{ user_id: string; resource_slug: string; action: string; scope: string }>(sql, values);
+
+  const rows = (result as QueryResult<{ user_id: string; resource_slug: string; action: string; scope: string }>).rows;
+
+  const map = new Map<string, PermissionGrant[]>();
+
+  for (const row of rows) {
+    if (!map.has(row.user_id)) {
+      map.set(row.user_id, []);
+    }
+
+    map.get(row.user_id)!.push({
+      key: buildPermissionKey(row.resource_slug, row.action, row.scope),
+      resource: row.resource_slug,
+      action: row.action,
+      scope: row.scope,
+    });
+  }
+
+  return map;
+}
+
 
 export async function createUser(params: {
   name: string;
@@ -87,6 +142,8 @@ export async function createUser(params: {
       }
     }
 
+    const permissions = await fetchPermissions(client, [user.id]);
+
     return {
       id: user.id,
       name: user.name,
@@ -95,6 +152,7 @@ export async function createUser(params: {
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       roles: params.roles,
+      permissions: permissions.get(user.id) ?? [],
     } satisfies UserRecord;
   });
 }
@@ -136,11 +194,20 @@ export async function listUsers(): Promise<UserRecord[]> {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         roles: [],
+        permissions: [],
       });
     }
 
     if (row.role_slug) {
       users.get(row.id)!.roles.push({ slug: row.role_slug, projectId: row.project_id });
+    }
+  }
+
+  const permissions = await fetchPermissions(null, Array.from(users.keys()));
+  for (const [userId, grants] of permissions.entries()) {
+    const user = users.get(userId);
+    if (user) {
+      user.permissions = grants;
     }
   }
 
@@ -184,6 +251,7 @@ export async function getUserByEmailWithPassword(email: string): Promise<UserAut
   }
 
   const base = rows[0];
+  const permissions = await fetchPermissions(null, [base.id]);
 
   return {
     id: base.id,
@@ -192,6 +260,7 @@ export async function getUserByEmailWithPassword(email: string): Promise<UserAut
     passwordHash: base.password_hash,
     isActive: base.is_active,
     roles,
+    permissions: permissions.get(base.id) ?? [],
   } satisfies UserAuthRecord;
 }
 
@@ -234,6 +303,7 @@ export async function getUserById(id: string): Promise<UserRecord | null> {
   }
 
   const base = rows[0];
+  const permissions = await fetchPermissions(null, [base.id]);
 
   return {
     id: base.id,
@@ -243,5 +313,6 @@ export async function getUserById(id: string): Promise<UserRecord | null> {
     createdAt: base.created_at,
     updatedAt: base.updated_at,
     roles,
+    permissions: permissions.get(base.id) ?? [],
   };
 }

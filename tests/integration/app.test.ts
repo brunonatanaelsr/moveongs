@@ -35,26 +35,40 @@ import { createApp } from '../../src/app';
 let app: FastifyInstance;
 
 async function loadSchema() {
-  const sqlPath = path.join(__dirname, '../../artifacts/sql/0001_initial.sql');
-  const schemaSql = fs.readFileSync(sqlPath, 'utf8');
-  const sanitized = schemaSql
-    .replace(/--.*$/gm, '')
-    .split(';')
-    .map((statement) => statement.trim())
-    .filter(Boolean)
-    .filter((statement) => {
-      const lower = statement.toLowerCase();
-      return !lower.startsWith('create extension') && !lower.startsWith('create index');
-    });
+  const files = [
+    path.join(__dirname, '../../artifacts/sql/0001_initial.sql'),
+    path.join(__dirname, '../../artifacts/sql/0002_rbac_and_profiles.sql'),
+  ];
 
-  for (const statement of sanitized) {
-    mem.public.none(statement);
+  for (const sqlPath of files) {
+    const schemaSql = fs.readFileSync(sqlPath, 'utf8');
+    const sanitized = schemaSql
+      .replace(/--.*$/gm, '')
+      .split(';')
+      .map((statement) => statement.trim())
+      .filter(Boolean)
+      .filter((statement) => {
+        const lower = statement.toLowerCase();
+        return !lower.startsWith('create extension') && !lower.startsWith('create index');
+      });
+
+    for (const statement of sanitized) {
+      mem.public.none(statement);
+    }
   }
 }
 
 beforeAll(async () => {
   await loadSchema();
   await seedDatabase();
+
+  const permissionsCount = await pool.query('select count(*)::int as count from permissions');
+  const rolePermissionsCount = await pool.query('select count(*)::int as count from role_permissions');
+
+  if ((permissionsCount.rows[0]?.count ?? 0) === 0 || (rolePermissionsCount.rows[0]?.count ?? 0) === 0) {
+    throw new Error('RBAC seed did not populate permissions tables');
+  }
+
   app = await createApp();
   await app.ready();
 });
@@ -81,6 +95,10 @@ describe('IMM API basics', () => {
     const body = response.json();
     expect(body).toHaveProperty('token');
     expect(body.user).toMatchObject({ email: 'admin@imm.local' });
+    expect(body.user.permissions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'beneficiaries:read' }),
+      expect.objectContaining({ key: 'form_submissions:create' })
+    ]));
   });
 
   it('creates a beneficiary when authorized', async () => {
@@ -93,7 +111,12 @@ describe('IMM API basics', () => {
       },
     });
 
-    const { token } = login.json();
+    const { token, user: loggedUser } = login.json();
+    expect(loggedUser.permissions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'beneficiaries:create' }),
+      expect.objectContaining({ key: 'beneficiaries:update' })
+    ]));
+
     const uniqueCode = `IMM-${Date.now()}`;
 
     const createResponse = await app.inject({

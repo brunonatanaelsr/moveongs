@@ -22,10 +22,14 @@ type FastifyDecorators = import('fastify').FastifyInstance;
 const PROJECT_READ_ROLES = ['admin', 'coordenacao', 'tecnica', 'educadora', 'recepcao', 'voluntaria', 'financeiro'];
 const PROJECT_WRITE_ROLES = ['admin', 'coordenacao'];
 const COHORT_WRITE_ROLES = ['admin', 'coordenacao'];
+const PROJECT_READ_REQUIREMENTS = { roles: PROJECT_READ_ROLES, permissions: ['projects:read'] };
+const PROJECT_WRITE_REQUIREMENTS = { roles: PROJECT_WRITE_ROLES, permissions: ['projects:create'] };
+const COHORT_CREATE_REQUIREMENTS = { roles: COHORT_WRITE_ROLES, permissions: ['cohorts:create:project'] };
+const COHORT_READ_REQUIREMENTS = { roles: PROJECT_READ_ROLES, permissions: ['cohorts:read:project'] };
 
 export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) => {
   app.get('/projects', {
-    preHandler: [app.authenticate, app.authorize(PROJECT_READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(PROJECT_READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedQuery = listProjectsQuerySchema.safeParse(request.query);
     if (!parsedQuery.success) {
@@ -37,7 +41,7 @@ export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) 
   });
 
   app.post('/projects', {
-    preHandler: [app.authenticate, app.authorize(PROJECT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(PROJECT_WRITE_REQUIREMENTS)],
   }, async (request, reply) => {
     const parsedBody = createProjectBodySchema.safeParse(request.body);
     if (!parsedBody.success) {
@@ -49,7 +53,7 @@ export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) 
   });
 
   app.get('/projects/:id', {
-    preHandler: [app.authenticate, app.authorize(PROJECT_READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(PROJECT_READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = projectIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -61,7 +65,7 @@ export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) 
   });
 
   app.patch('/projects/:id', {
-    preHandler: [app.authenticate, app.authorize(PROJECT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize({ roles: PROJECT_WRITE_ROLES, permissions: ['projects:update'], strategy: 'any' })],
   }, async (request) => {
     const parsedParams = projectIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -78,7 +82,7 @@ export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) 
   });
 
   app.post('/projects/:id/cohorts', {
-    preHandler: [app.authenticate, app.authorize(COHORT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(COHORT_CREATE_REQUIREMENTS)],
   }, async (request, reply) => {
     const parsedParams = projectIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -95,7 +99,7 @@ export const projectRoutes: FastifyPluginAsync = async (app: FastifyDecorators) 
   });
 
   app.get('/projects/:id/cohorts', {
-    preHandler: [app.authenticate, app.authorize(PROJECT_READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(COHORT_READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = projectIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {

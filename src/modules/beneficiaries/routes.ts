@@ -15,10 +15,13 @@ import {
 
 const READ_ROLES = ['admin', 'coordenacao', 'tecnica', 'educadora', 'recepcao', 'financeiro'];
 const WRITE_ROLES = ['admin', 'coordenacao', 'tecnica', 'recepcao'];
+const READ_REQUIREMENTS = { roles: READ_ROLES, permissions: ['beneficiaries:read', 'beneficiaries:read:own'] };
+const WRITE_REQUIREMENTS = { roles: WRITE_ROLES, permissions: ['beneficiaries:create'] };
+const UPDATE_REQUIREMENTS = { roles: WRITE_ROLES, permissions: ['beneficiaries:update'] };
 
 export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
   app.get('/beneficiaries', {
-    preHandler: [app.authenticate, app.authorize(READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedQuery = listBeneficiaryQuerySchema.safeParse(request.query);
 
@@ -39,7 +42,7 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/beneficiaries', {
-    preHandler: [app.authenticate, app.authorize(WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(WRITE_REQUIREMENTS)],
   }, async (request, reply) => {
     const parsedBody = createBeneficiaryBodySchema.safeParse(request.body);
 
@@ -52,7 +55,7 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/beneficiaries/:id', {
-    preHandler: [app.authenticate, app.authorize(READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = beneficiaryIdParamSchema.safeParse(request.params);
 
@@ -65,7 +68,7 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/beneficiaries/:id', {
-    preHandler: [app.authenticate, app.authorize(WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(UPDATE_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = beneficiaryIdParamSchema.safeParse(request.params);
 

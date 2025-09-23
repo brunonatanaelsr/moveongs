@@ -18,10 +18,15 @@ import {
 
 const ENROLLMENT_WRITE_ROLES = ['admin', 'coordenacao', 'tecnica', 'educadora', 'recepcao'];
 const ENROLLMENT_READ_ROLES = ['admin', 'coordenacao', 'tecnica', 'educadora', 'recepcao', 'financeiro'];
+const ENROLLMENT_CREATE_REQUIREMENTS = { roles: ENROLLMENT_WRITE_ROLES, permissions: ['enrollments:create:project'] };
+const ENROLLMENT_READ_REQUIREMENTS = { roles: ENROLLMENT_READ_ROLES, permissions: ['enrollments:read:project', 'enrollments:read:own'] };
+const ENROLLMENT_UPDATE_REQUIREMENTS = { roles: ENROLLMENT_WRITE_ROLES, permissions: ['enrollments:update:project'] };
+const ATTENDANCE_WRITE_REQUIREMENTS = { roles: ENROLLMENT_WRITE_ROLES, permissions: ['enrollments:attendance:project'] };
+const ATTENDANCE_READ_REQUIREMENTS = { roles: ENROLLMENT_READ_ROLES, permissions: ['enrollments:read:project', 'enrollments:read:own'] };
 
 export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
   app.post('/enrollments', {
-    preHandler: [app.authenticate, app.authorize(ENROLLMENT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(ENROLLMENT_CREATE_REQUIREMENTS)],
   }, async (request, reply) => {
     const parsedBody = createEnrollmentBodySchema.safeParse(request.body);
     if (!parsedBody.success) {
@@ -37,7 +42,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/enrollments', {
-    preHandler: [app.authenticate, app.authorize(ENROLLMENT_READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(ENROLLMENT_READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedQuery = listEnrollmentQuerySchema.safeParse(request.query);
     if (!parsedQuery.success) {
@@ -57,7 +62,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/enrollments/:id', {
-    preHandler: [app.authenticate, app.authorize(ENROLLMENT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(ENROLLMENT_UPDATE_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = enrollmentIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -74,7 +79,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/enrollments/:id/attendance', {
-    preHandler: [app.authenticate, app.authorize(ENROLLMENT_WRITE_ROLES)],
+    preHandler: [app.authenticate, app.authorize(ATTENDANCE_WRITE_REQUIREMENTS)],
   }, async (request, reply) => {
     const parsedParams = enrollmentIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -98,7 +103,7 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/enrollments/:id/attendance', {
-    preHandler: [app.authenticate, app.authorize(ENROLLMENT_READ_ROLES)],
+    preHandler: [app.authenticate, app.authorize(ATTENDANCE_READ_REQUIREMENTS)],
   }, async (request) => {
     const parsedParams = enrollmentIdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {

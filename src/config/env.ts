@@ -10,6 +10,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('1d'),
+  REDIS_URL: z.string().url().optional(),
+  CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
 });
 
 type Env = z.infer<typeof envSchema>;

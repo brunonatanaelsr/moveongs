@@ -1,0 +1,79 @@
+<section class="imm-meta">Dashboard Analytics — Instituto Move Marias</section>
+<section class="imm-section">
+  <h1>Resumo de Indicadores</h1>
+  <ul>
+    <li><strong>Beneficiárias ativas:</strong> {{overview.kpis.beneficiarias_ativas}}</li>
+    <li><strong>Novas beneficiárias:</strong> {{overview.kpis.novas_beneficiarias}}</li>
+    <li><strong>Matrículas ativas:</strong> {{overview.kpis.matriculas_ativas}}</li>
+    <li><strong>Assiduidade média:</strong> {{percent overview.kpis.assiduidade_media}}</li>
+    <li><strong>Consentimentos pendentes:</strong> {{overview.kpis.consentimentos_pendentes}}</li>
+  </ul>
+</section>
+
+<section class="imm-section">
+  <h2>Séries Temporais</h2>
+  <h3>Novas beneficiárias</h3>
+  <table>
+    <thead><tr><th>Data</th><th>Total</th></tr></thead>
+    <tbody>
+      {{#each overview.series.novas_beneficiarias}}
+      <tr><td>{{this.t}}</td><td>{{this.v}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h3>Novas matrículas</h3>
+  <table>
+    <thead><tr><th>Data</th><th>Total</th></tr></thead>
+    <tbody>
+      {{#each overview.series.novas_matriculas}}
+      <tr><td>{{this.t}}</td><td>{{this.v}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h3>Assiduidade média</h3>
+  <table>
+    <thead><tr><th>Data</th><th>Taxa</th></tr></thead>
+    <tbody>
+      {{#each overview.series.assiduidade_media}}
+      <tr><td>{{this.t}}</td><td>{{percent this.v}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+
+<section class="imm-section">
+  <h2>Assiduidade por Projeto</h2>
+  <table>
+    <thead><tr><th>Projeto</th><th>Assiduidade</th></tr></thead>
+    <tbody>
+      {{#each overview.categorias.assiduidade_por_projeto}}
+      <tr><td>{{this.projeto}}</td><td>{{percent this.valor}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+
+<section class="imm-section">
+  <h2>Listas de Atenção</h2>
+  <h3>Risco de evasão</h3>
+  <table>
+    <thead><tr><th>Beneficiária</th><th>Projeto</th><th>Turma</th><th>Assiduidade</th></tr></thead>
+    <tbody>
+      {{#each overview.listas.risco_evasao}}
+      <tr><td>{{this.beneficiaria}}</td><td>{{this.projeto}}</td><td>{{this.turma}}</td><td>{{percent this.assiduidade}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h3>Consentimentos pendentes/revogados</h3>
+  <table>
+    <thead><tr><th>Beneficiária</th><th>Tipo</th><th>Desde</th></tr></thead>
+    <tbody>
+      {{#each overview.listas.consentimentos_pendentes}}
+      <tr><td>{{this.beneficiaria}}</td><td>{{this.tipo}}</td><td>{{this.desde}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
