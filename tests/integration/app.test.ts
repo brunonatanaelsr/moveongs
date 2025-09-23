@@ -173,31 +173,94 @@ describe('IMM API basics', () => {
 
     const { token } = login.json();
 
-    const templateResponse = await app.inject({
-      method: 'POST',
+    const listDefaults = await app.inject({
+      method: 'GET',
       url: '/form-templates',
       headers: {
         authorization: `Bearer ${token}`,
       },
+    });
+
+    expect(listDefaults.statusCode).toBe(200);
+    const templates = listDefaults.json().data as Array<{
+      formType: string;
+      schemaVersion: string;
+      schema: any;
+    }>;
+
+    const seededAnamnese = templates.find(
+      (item) => item.formType === 'anamnese_social' && item.schemaVersion === 'v1',
+    );
+    const seededEvolucao = templates.find(
+      (item) => item.formType === 'ficha_evolucao' && item.schemaVersion === 'v1',
+    );
+
+    expect(seededAnamnese).toBeTruthy();
+    expect(seededAnamnese?.schema?.title).toBe('Anamnese Social');
+    expect(seededEvolucao).toBeTruthy();
+    expect(seededEvolucao?.schema?.title).toBe('Ficha de Evolução');
+
+    let beneficiaryId = seededBeneficiaryId;
+
+    if (!beneficiaryId) {
+      const fallback = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          fullName: 'Beneficiária Form Teste',
+          householdMembers: [],
+          vulnerabilities: [],
+        },
+      });
+
+      expect(fallback.statusCode).toBe(201);
+      beneficiaryId = fallback.json().beneficiary.id as string;
+      seededBeneficiaryId = beneficiaryId;
+    }
+
+    expect(beneficiaryId).toBeTruthy();
+
+    const fichaSubmissionResponse = await app.inject({
+      method: 'POST',
+      url: `/beneficiaries/${beneficiaryId}/forms`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
       payload: {
-        formType: 'anamnese_social',
+        formType: 'ficha_evolucao',
         schemaVersion: 'v1',
-        schema: {
-          title: 'Anamnese Social',
-          type: 'object',
-          properties: {
-            nome: { type: 'string' },
+        payload: {
+          identificacao_atendimento: {
+            beneficiaria_nome: 'Beneficiária Form Teste',
+            beneficiaria_id: beneficiaryId,
+            data_atendimento: new Date().toISOString().slice(0, 10),
+            profissional_responsavel: 'Admin IMM',
+            tipo_atendimento: 'acolhimento',
+          },
+          descricao_atendimento: {
+            relato_sessao: 'Primeiro atendimento e levantamento de demandas.',
+            objetivos_trabalhados: ['acolhimento', 'escuta'],
+          },
+          avaliacao: {
+            avaliacao_profissional: 'Participativa',
+            encaminhamentos: [
+              { descricao: 'Encaminhar para oficina de geração de renda' },
+            ],
           },
         },
+        signedBy: ['Admin IMM'],
+        signedAt: [new Date().toISOString()],
       },
     });
 
-    expect(templateResponse.statusCode).toBe(201);
-    const { template } = templateResponse.json();
-    expect(template).toMatchObject({
-      formType: 'anamnese_social',
+    expect(fichaSubmissionResponse.statusCode).toBe(201);
+    expect(fichaSubmissionResponse.json().submission).toMatchObject({
+      beneficiaryId,
+      formType: 'ficha_evolucao',
       schemaVersion: 'v1',
-      status: 'active',
     });
 
     const templateResponseV2 = await app.inject({
@@ -229,33 +292,10 @@ describe('IMM API basics', () => {
     expect(listTemplates.statusCode).toBe(200);
     expect(listTemplates.json().data).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ schemaVersion: 'v1' }),
-        expect.objectContaining({ schemaVersion: 'v2' }),
+        expect.objectContaining({ formType: 'anamnese_social', schemaVersion: 'v1' }),
+        expect.objectContaining({ formType: 'anamnese_social', schemaVersion: 'v2' }),
       ]),
     );
-
-    let beneficiaryId = seededBeneficiaryId;
-
-    if (!beneficiaryId) {
-      const fallback = await app.inject({
-        method: 'POST',
-        url: '/beneficiaries',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          fullName: 'Beneficiária Form Teste',
-          householdMembers: [],
-          vulnerabilities: [],
-        },
-      });
-
-      expect(fallback.statusCode).toBe(201);
-      beneficiaryId = fallback.json().beneficiary.id as string;
-      seededBeneficiaryId = beneficiaryId;
-    }
-
-    expect(beneficiaryId).toBeTruthy();
 
     const submissionResponse = await app.inject({
       method: 'POST',
@@ -268,7 +308,23 @@ describe('IMM API basics', () => {
         payload: {
           identificacao: {
             nome: 'Beneficiária Form Teste',
-            cpf: '12345678900',
+            data_nascimento: '1990-01-01',
+            telefone_principal: '21999999999',
+            endereco: {
+              logradouro: 'Rua de Teste',
+              bairro: 'Centro',
+              cidade: 'Rio de Janeiro',
+              estado: 'RJ',
+            },
+          },
+          trabalho_renda: {
+            ocupacao_principal: 'Artesã',
+            renda_mensal: 600,
+          },
+          avaliacao_tecnica: {
+            responsavel_preenchimento: 'Admin IMM',
+            data_preenchimento: new Date().toISOString().slice(0, 10),
+            necessidades_identificadas: ['Geração de renda', 'Apoio psicossocial'],
           },
         },
         signedBy: ['Admin IMM'],
