@@ -49,6 +49,7 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 - `frontend_glass_ui_examples/` – componentes React (Tailwind) com visual “liquid glass” + `PermissionGuard`.
 - `tools/pdf-renderer/` – microserviço Node (Playwright + Handlebars) para gerar PDFs (ex.: recibos e dashboard).
 - `apps/dashboard/` – esqueleto Next.js do dashboard institucional (filtros, gráficos, exportações CSV/PDF).
+- `src/modules/notifications` – fila de disparos externos (e-mail/WhatsApp) e webhooks configuráveis.
 
 ## Analytics e Dashboard
 
@@ -69,6 +70,15 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 
 - Backend: `npm test` (Vitest + pg-mem) cobre autenticação e rotas de analytics (RBAC, exportações, cache).
 - Dashboard: `apps/dashboard` possui testes com React Testing Library (`npm test` dentro do app).
+
+## Notificações e webhooks
+
+- Configure canais padrão através das variáveis de ambiente:
+  - `NOTIFICATIONS_EMAIL_FROM` (remetente) e `NOTIFICATIONS_EMAIL_RECIPIENTS` (lista separada por vírgula).
+  - `NOTIFICATIONS_WHATSAPP_NUMBERS` para números internacionais (ex.: `+5521999999999`).
+  - `NOTIFICATIONS_WEBHOOK_TIMEOUT_MS` e `NOTIFICATIONS_WEBHOOK_SECRET` para chamadas HTTP assíncronas.
+- Endpoints protegidos (`/notifications/webhooks`) permitem listar, cadastrar e remover webhooks por evento chave.
+- Eventos de matrículas, presenças e consentimentos alimentam automaticamente fila de envios multi canal.
 
 ## Próximos passos sugeridos
 

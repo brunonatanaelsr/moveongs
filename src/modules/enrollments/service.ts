@@ -8,6 +8,7 @@ import {
   upsertAttendance,
   updateEnrollment as updateEnrollmentRepository,
 } from './repository';
+import { publishNotificationEvent } from '../notifications/service';
 
 export async function createEnrollment(input: {
   beneficiaryId: string;
@@ -16,7 +17,24 @@ export async function createEnrollment(input: {
   status?: string;
   agreementAcceptance?: Record<string, unknown> | null;
 }): Promise<EnrollmentRecord> {
-  return createEnrollmentRepository(input);
+  const enrollment = await createEnrollmentRepository(input);
+
+  publishNotificationEvent({
+    type: 'enrollment.created',
+    data: {
+      enrollmentId: enrollment.id,
+      beneficiaryId: enrollment.beneficiaryId,
+      beneficiaryName: enrollment.beneficiaryName,
+      cohortId: enrollment.cohortId,
+      cohortCode: enrollment.cohortCode,
+      projectId: enrollment.projectId,
+      projectName: enrollment.projectName,
+      status: enrollment.status,
+      enrolledAt: enrollment.enrolledAt,
+    },
+  });
+
+  return enrollment;
 }
 
 export async function updateEnrollment(id: string, input: {
@@ -65,7 +83,20 @@ export async function recordAttendance(input: {
   justification?: string | null;
   recordedBy?: string | null;
 }): Promise<AttendanceRecord> {
-  return upsertAttendance(input);
+  const attendance = await upsertAttendance(input);
+
+  publishNotificationEvent({
+    type: 'attendance.recorded',
+    data: {
+      attendanceId: attendance.id,
+      enrollmentId: attendance.enrollmentId,
+      date: attendance.date,
+      present: attendance.present,
+      justification: attendance.justification,
+    },
+  });
+
+  return attendance;
 }
 
 export async function getAttendance(params: {
