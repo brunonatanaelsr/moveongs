@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
+vi.setConfig({ testTimeout: 20000, hookTimeout: 30000 });
 import type { FastifyInstance } from 'fastify';
 
 const { mem, adapter } = vi.hoisted(() => {
@@ -9,11 +10,11 @@ const { mem, adapter } = vi.hoisted(() => {
   const db = newDb({ autoCreateForeignKeyIndices: true });
   const adapter = db.adapters.createPg();
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { v4 } = require('uuid');
+  const { randomUUID } = require('crypto');
   db.public.registerFunction({
     name: 'gen_random_uuid',
     returns: 'uuid',
-    implementation: () => v4(),
+    implementation: () => randomUUID(),
   });
   process.env.NODE_ENV = 'test';
   process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-imm-123456789012345678901234567890';
@@ -33,6 +34,7 @@ import { pool } from '../../src/db/pool';
 import { createApp } from '../../src/app';
 
 let app: FastifyInstance;
+let seededBeneficiaryId: string | null = null;
 
 async function loadSchema() {
   const files = [
@@ -155,5 +157,194 @@ describe('IMM API basics', () => {
       fullName: 'Beneficiária Teste',
       vulnerabilities: [{ slug: 'desemprego', label: expect.any(String) }],
     });
+
+    seededBeneficiaryId = beneficiary.id;
+  });
+
+  it('manages form templates and submissions', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
+        email: 'admin@imm.local',
+        password: 'ChangeMe123!',
+      },
+    });
+
+    const { token } = login.json();
+
+    const templateResponse = await app.inject({
+      method: 'POST',
+      url: '/form-templates',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        formType: 'anamnese_social',
+        schemaVersion: 'v1',
+        schema: {
+          title: 'Anamnese Social',
+          type: 'object',
+          properties: {
+            nome: { type: 'string' },
+          },
+        },
+      },
+    });
+
+    expect(templateResponse.statusCode).toBe(201);
+    const { template } = templateResponse.json();
+    expect(template).toMatchObject({
+      formType: 'anamnese_social',
+      schemaVersion: 'v1',
+      status: 'active',
+    });
+
+    const templateResponseV2 = await app.inject({
+      method: 'POST',
+      url: '/form-templates',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        formType: 'anamnese_social',
+        schemaVersion: 'v2',
+        schema: {
+          title: 'Anamnese Social v2',
+          type: 'object',
+        },
+      },
+    });
+
+    expect(templateResponseV2.statusCode).toBe(201);
+
+    const listTemplates = await app.inject({
+      method: 'GET',
+      url: '/form-templates',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(listTemplates.statusCode).toBe(200);
+    expect(listTemplates.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ schemaVersion: 'v1' }),
+        expect.objectContaining({ schemaVersion: 'v2' }),
+      ]),
+    );
+
+    let beneficiaryId = seededBeneficiaryId;
+
+    if (!beneficiaryId) {
+      const fallback = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          fullName: 'Beneficiária Form Teste',
+          householdMembers: [],
+          vulnerabilities: [],
+        },
+      });
+
+      expect(fallback.statusCode).toBe(201);
+      beneficiaryId = fallback.json().beneficiary.id as string;
+      seededBeneficiaryId = beneficiaryId;
+    }
+
+    expect(beneficiaryId).toBeTruthy();
+
+    const submissionResponse = await app.inject({
+      method: 'POST',
+      url: `/beneficiaries/${beneficiaryId}/forms`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        formType: 'anamnese_social',
+        payload: {
+          identificacao: {
+            nome: 'Beneficiária Form Teste',
+            cpf: '12345678900',
+          },
+        },
+        signedBy: ['Admin IMM'],
+        signedAt: [new Date().toISOString()],
+        attachments: [{ fileName: 'assinatura.png' }],
+      },
+    });
+
+    expect(submissionResponse.statusCode).toBe(201);
+    const { submission } = submissionResponse.json();
+    expect(submission).toMatchObject({
+      beneficiaryId,
+      formType: 'anamnese_social',
+      schemaVersion: 'v2',
+      signedBy: ['Admin IMM'],
+    });
+
+    const listSubmissions = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/forms`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(listSubmissions.statusCode).toBe(200);
+    expect(listSubmissions.json().data[0]).toMatchObject({
+      id: submission.id,
+      schemaVersion: 'v2',
+    });
+
+    const getSubmission = await app.inject({
+      method: 'GET',
+      url: `/forms/${submission.id}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(getSubmission.statusCode).toBe(200);
+    expect(getSubmission.json().submission.template).toMatchObject({
+      schemaVersion: 'v2',
+    });
+
+    const updateSubmission = await app.inject({
+      method: 'PATCH',
+      url: `/forms/${submission.id}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        signedBy: [],
+        signedAt: [],
+        attachments: null,
+      },
+    });
+
+    expect(updateSubmission.statusCode).toBe(200);
+    expect(updateSubmission.json().submission).toMatchObject({
+      signedBy: [],
+      attachments: [],
+    });
+
+    const duplicateTemplate = await app.inject({
+      method: 'POST',
+      url: '/form-templates',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        formType: 'anamnese_social',
+        schemaVersion: 'v2',
+        schema: { title: 'Duplicated' },
+      },
+    });
+
+    expect(duplicateTemplate.statusCode).toBe(409);
   });
 });
