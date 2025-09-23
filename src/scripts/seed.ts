@@ -1,9 +1,23 @@
+import fs from 'fs/promises';
+import path from 'path';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
 import { getEnv } from '../config/env';
 import { pool } from '../db/pool';
 import { logger } from '../config/logger';
+
+type SeedFormTemplate = {
+  formType: string;
+  schemaVersion: string;
+  file: string;
+  status?: 'active' | 'inactive';
+};
+
+const FORM_TEMPLATE_SEED: SeedFormTemplate[] = [
+  { formType: 'anamnese_social', schemaVersion: 'v1', file: 'form.anamnese_social.v1.json' },
+  { formType: 'ficha_evolucao', schemaVersion: 'v1', file: 'form.ficha_evolucao.v1.json' },
+];
 
 const ROLE_SEED = [
   { slug: 'admin', name: 'Admin' },
@@ -431,6 +445,63 @@ async function seedAdminUser() {
   logger.info({ email: adminEmail }, 'seeded admin user');
 }
 
+async function seedFormTemplates() {
+  const baseDir = path.join(__dirname, '../../artifacts/json_schemas');
+
+  for (const template of FORM_TEMPLATE_SEED) {
+    const schemaPath = path.join(baseDir, template.file);
+    let schema: unknown;
+
+    try {
+      const raw = await fs.readFile(schemaPath, 'utf8');
+      schema = JSON.parse(raw);
+    } catch (error) {
+      logger.error({ schemaPath, err: error }, 'failed to load form template schema');
+      throw error;
+    }
+
+    const status = template.status ?? 'active';
+    const existing = await pool.query<{ id: string; status: string }>(
+      `select id, status from form_templates where form_type = $1 and schema_version = $2`,
+      [template.formType, template.schemaVersion],
+    );
+
+    if (existing.rowCount && existing.rowCount > 0) {
+      const row = existing.rows[0];
+      await pool.query(
+        `update form_templates set
+           schema = $2,
+           status = $3,
+           published_at = case
+             when $3 = 'active' and status <> 'active' then now()
+             when $3 <> 'active' then null
+             else published_at
+           end
+         where id = $1`,
+        [row.id, schema, status],
+      );
+      logger.info(
+        { formType: template.formType, schemaVersion: template.schemaVersion },
+        'updated seeded form template',
+      );
+      continue;
+    }
+
+    const id = randomUUID();
+
+    await pool.query(
+      `insert into form_templates (id, form_type, schema_version, schema, status, published_at)
+       values ($1, $2, $3, $4, $5, case when $5 = 'active' then now() else null end)`,
+      [id, template.formType, template.schemaVersion, schema, status],
+    );
+
+    logger.info(
+      { formType: template.formType, schemaVersion: template.schemaVersion },
+      'seeded form template',
+    );
+  }
+}
+
 export async function seedDatabase() {
   getEnv();
   await seedRoles();
@@ -439,6 +510,7 @@ export async function seedDatabase() {
   const permissionIds = await seedPermissions();
   await seedRolePermissions(permissionIds);
   await seedAdminUser();
+  await seedFormTemplates();
   await seedDemoData();
   logger.info('Seed completed');
 }
