@@ -347,4 +347,165 @@ describe('IMM API basics', () => {
 
     expect(duplicateTemplate.statusCode).toBe(409);
   });
+
+  it('manages consents, attachments and audit logs', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
+        email: 'admin@imm.local',
+        password: 'ChangeMe123!',
+      },
+    });
+
+    expect(login.statusCode).toBe(200);
+    const { token } = login.json();
+
+    let beneficiaryId = seededBeneficiaryId;
+
+    if (!beneficiaryId) {
+      const createBeneficiaryResponse = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          fullName: 'Beneficiária Consent Teste',
+          householdMembers: [],
+          vulnerabilities: [],
+        },
+      });
+
+      expect(createBeneficiaryResponse.statusCode).toBe(201);
+      beneficiaryId = createBeneficiaryResponse.json().beneficiary.id as string;
+      seededBeneficiaryId = beneficiaryId;
+    }
+
+    const consentResponse = await app.inject({
+      method: 'POST',
+      url: `/beneficiaries/${beneficiaryId}/consents`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        type: 'lgpd',
+        textVersion: 'v1',
+        granted: true,
+        evidence: { method: 'digital-signature' },
+      },
+    });
+
+    expect(consentResponse.statusCode).toBe(201);
+    const { consent } = consentResponse.json();
+    expect(consent).toMatchObject({
+      beneficiaryId,
+      type: 'lgpd',
+      textVersion: 'v1',
+      granted: true,
+    });
+
+    const listConsents = await app.inject({
+      method: 'GET',
+      url: `/beneficiaries/${beneficiaryId}/consents`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(listConsents.statusCode).toBe(200);
+    expect(listConsents.json().data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: consent.id })]),
+    );
+
+    const revokeResponse = await app.inject({
+      method: 'PATCH',
+      url: `/consents/${consent.id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        granted: false,
+        revokedAt: new Date().toISOString(),
+      },
+    });
+
+    expect(revokeResponse.statusCode).toBe(200);
+    expect(revokeResponse.json().consent.revokedAt).not.toBeNull();
+
+    const boundary = '----IMMTestBoundary';
+    const fileContent = 'Arquivo de teste IMM';
+    const multipartBody = Buffer.from(
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="ownerType"\r\n\r\nbeneficiary\r\n' +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="ownerId"\r\n\r\n' + beneficiaryId + '\r\n' +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="file"; filename="teste.txt"\r\n' +
+      'Content-Type: text/plain\r\n\r\n' +
+      fileContent + '\r\n' +
+      `--${boundary}--\r\n`,
+      'utf-8',
+    );
+
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: '/files',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      payload: multipartBody,
+    });
+
+    expect(uploadResponse.statusCode).toBe(201);
+    const { attachment } = uploadResponse.json();
+    expect(attachment).toMatchObject({ ownerType: 'beneficiary', ownerId: beneficiaryId });
+
+    const listAttachmentsResponse = await app.inject({
+      method: 'GET',
+      url: `/attachments?ownerType=beneficiary&ownerId=${beneficiaryId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(listAttachmentsResponse.statusCode).toBe(200);
+    expect(listAttachmentsResponse.json().data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: attachment.id })]),
+    );
+
+    const metadataResponse = await app.inject({
+      method: 'GET',
+      url: `/attachments/${attachment.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(metadataResponse.statusCode).toBe(200);
+
+    const downloadResponse = await app.inject({
+      method: 'GET',
+      url: `/attachments/${attachment.id}?download=1`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(downloadResponse.statusCode).toBe(200);
+    expect(downloadResponse.body).toBe(fileContent);
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/attachments/${attachment.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+
+    const auditConsentLogs = await app.inject({
+      method: 'GET',
+      url: `/audit/logs?entity=consent&entityId=${consent.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(auditConsentLogs.statusCode).toBe(200);
+    expect(auditConsentLogs.json().data.length).toBeGreaterThanOrEqual(2);
+
+    const auditAttachmentLogs = await app.inject({
+      method: 'GET',
+      url: `/audit/logs?entity=attachment&entityId=${attachment.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(auditAttachmentLogs.statusCode).toBe(200);
+    expect(auditAttachmentLogs.json().data.length).toBeGreaterThanOrEqual(2);
+  });
 });

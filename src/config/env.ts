@@ -12,6 +12,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1d'),
   REDIS_URL: z.string().url().optional(),
   CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
+  UPLOADS_DIR: z.string().default('tmp/uploads'),
 });
 
 type Env = z.infer<typeof envSchema>;

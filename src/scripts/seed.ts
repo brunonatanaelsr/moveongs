@@ -38,7 +38,10 @@ const RESOURCE_SEED = [
   { slug: 'attendance', description: 'Registro de assiduidade' },
   { slug: 'profiles', description: 'Perfis de usuários e voluntários' },
   { slug: 'activities', description: 'Atividades e feed interno' },
-  { slug: 'analytics', description: 'Relatórios e analytics' }
+  { slug: 'analytics', description: 'Relatórios e analytics' },
+  { slug: 'consents', description: 'Termos e consentimentos LGPD/Imagem' },
+  { slug: 'attachments', description: 'Anexos e arquivos enviados' },
+  { slug: 'audit_logs', description: 'Trilha de auditoria' }
 ];
 
 const PERMISSION_SEED = [
@@ -81,7 +84,18 @@ const PERMISSION_SEED = [
   { resource: 'activities', action: 'moderate', scope: 'global', description: 'Moderar feed' },
   { resource: 'analytics', action: 'read', scope: 'global', description: 'Consultar dashboards e relatórios' },
   { resource: 'analytics', action: 'export', scope: 'global', description: 'Exportar relatórios' },
-  { resource: 'analytics', action: 'read', scope: 'project', description: 'Consultar analytics do projeto' }
+  { resource: 'analytics', action: 'read', scope: 'project', description: 'Consultar analytics do projeto' },
+
+  { resource: 'consents', action: 'create', scope: 'global', description: 'Registrar consentimentos' },
+  { resource: 'consents', action: 'read', scope: 'global', description: 'Consultar consentimentos' },
+  { resource: 'consents', action: 'update', scope: 'global', description: 'Atualizar ou revogar consentimentos' },
+  { resource: 'consents', action: 'read', scope: 'own', description: 'Beneficiária visualiza consentimentos próprios' },
+
+  { resource: 'attachments', action: 'upload', scope: 'global', description: 'Enviar arquivos' },
+  { resource: 'attachments', action: 'read', scope: 'global', description: 'Visualizar anexos' },
+  { resource: 'attachments', action: 'delete', scope: 'global', description: 'Remover anexos' },
+
+  { resource: 'audit_logs', action: 'read', scope: 'global', description: 'Consultar trilha de auditoria' }
 ];
 
 const ROLE_PERMISSION_MAP: Record<string, string[]> = {
@@ -111,7 +125,14 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'activities:read',
     'activities:moderate',
     'analytics:read',
-    'analytics:export'
+    'analytics:export',
+    'consents:create',
+    'consents:read',
+    'consents:update',
+    'attachments:upload',
+    'attachments:read',
+    'attachments:delete',
+    'audit_logs:read'
   ],
   tecnica: [
     'beneficiaries:read',
@@ -127,7 +148,12 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'profiles:read',
     'activities:create',
     'activities:read',
-    'analytics:read'
+    'analytics:read',
+    'consents:create',
+    'consents:read',
+    'consents:update',
+    'attachments:upload',
+    'attachments:read'
   ],
   educadora: [
     'beneficiaries:read',
@@ -139,31 +165,40 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'profiles:read',
     'activities:create',
     'activities:read',
-    'analytics:read:project'
+    'analytics:read:project',
+    'attachments:upload',
+    'attachments:read'
   ],
   recepcao: [
     'beneficiaries:create',
     'beneficiaries:read',
     'form_submissions:create',
-    'form_submissions:read'
+    'form_submissions:read',
+    'consents:create',
+    'consents:read',
+    'attachments:upload',
+    'attachments:read'
   ],
   financeiro: [
     'beneficiaries:read',
     'form_submissions:read',
     'projects:read',
-    'profiles:read'
+    'profiles:read',
+    'attachments:read'
   ],
   voluntaria: [
     'beneficiaries:read',
     'form_submissions:read',
     'profiles:read',
-    'activities:read'
+    'activities:read',
+    'attachments:read'
   ],
   leitura_externa: [
     'beneficiaries:read',
     'form_submissions:read',
     'projects:read',
-    'profiles:read'
+    'profiles:read',
+    'attachments:read'
   ],
   beneficiaria: [
     'beneficiaries:read:own',
@@ -172,7 +207,8 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'profiles:update:own',
     'enrollments:read:own',
     'activities:create',
-    'activities:read'
+    'activities:read',
+    'consents:read:own'
   ],
 };
 

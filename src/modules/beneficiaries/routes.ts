@@ -12,6 +12,7 @@ import {
   listBeneficiarySummaries,
   updateBeneficiary,
 } from './service';
+import { recordAuditLog } from '../../shared/audit';
 
 const READ_ROLES = ['admin', 'coordenacao', 'tecnica', 'educadora', 'recepcao', 'financeiro'];
 const WRITE_ROLES = ['admin', 'coordenacao', 'tecnica', 'recepcao'];
@@ -51,6 +52,16 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const record = await createBeneficiary(parsedBody.data);
+
+    await recordAuditLog({
+      userId: request.user?.sub ?? null,
+      entity: 'beneficiary',
+      entityId: record.id,
+      action: 'create',
+      beforeData: null,
+      afterData: record,
+    });
+
     return reply.code(201).send({ beneficiary: record });
   });
 
@@ -82,7 +93,18 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
+    const before = await getBeneficiary(parsedParams.data.id);
     const record = await updateBeneficiary(parsedParams.data.id, parsedBody.data);
+
+    await recordAuditLog({
+      userId: request.user?.sub ?? null,
+      entity: 'beneficiary',
+      entityId: record.id,
+      action: 'update',
+      beforeData: before,
+      afterData: record,
+    });
+
     return { beneficiary: record };
   });
 };
