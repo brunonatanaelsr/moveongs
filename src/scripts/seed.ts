@@ -391,13 +391,18 @@ async function seedAdminUser() {
 
   if (!rowCount || rowCount === 0) {
     const passwordHash = await hash(adminPassword, 12);
+    const newUserId = randomUUID();
     const userInsert = await pool.query<{ id: string }>(
-      `insert into users (name, email, password_hash)
-       values ($1, $2, $3)
+      `insert into users (id, name, email, password_hash)
+       values ($1, $2, $3, $4)
        returning id`,
-      ['Admin IMM', adminEmail, passwordHash],
+      [newUserId, 'Admin IMM', adminEmail, passwordHash],
     );
     userId = userInsert.rows[0].id;
+  }
+
+  if (!userId) {
+    throw new Error('admin user id missing after seeding');
   }
 
   const roleIdResult = await pool.query<{ id: number }>(
@@ -410,10 +415,10 @@ async function seedAdminUser() {
   const roleId = roleIdResult.rows[0].id;
 
   await pool.query(
-    `insert into user_roles (user_id, role_id, project_id)
-     values ($1, $2, null)
+    `insert into user_roles (id, user_id, role_id, project_id)
+     values ($1, $2, $3, null)
      on conflict do nothing`,
-    [userId, roleId],
+    [randomUUID(), userId, roleId],
   );
 
   await pool.query(
