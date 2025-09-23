@@ -525,13 +525,40 @@ async function seedDemoData() {
     );
   }
 
-  for (const benef of beneficiaries.slice(25)) {
+  for (const benef of beneficiaries.slice(25, 35)) {
     await pool.query(
       `insert into consents (beneficiary_id, type, text_version, granted, granted_at, revoked_at)
-         values ($1, 'lgpd', 'demo-v1', false, null, null)
-         on conflict do nothing`,
+         values ($1, 'lgpd', 'demo-v1', false, null, now() - interval '10 days')
+         on conflict do update set granted = excluded.granted, revoked_at = excluded.revoked_at`,
       [benef.id],
     );
+  }
+
+  const { rows: users } = await pool.query<{ id: string }>(`select id from users order by created_at asc limit 1`);
+  const createdBy = users[0]?.id ?? null;
+
+  if (createdBy) {
+    const planTargets = beneficiaries.slice(0, 12);
+    for (const [index, benef] of planTargets.entries()) {
+      const { rows: planRows } = await pool.query<{ id: string }>(
+        `insert into action_plans (beneficiary_id, created_by, status)
+           values ($1, $2, 'active')
+           returning id`,
+        [benef.id, createdBy],
+      );
+      const planId = planRows[0]?.id;
+      if (!planId) continue;
+      const statuses = ['pending', 'in_progress', 'done', 'blocked'];
+      for (let i = 0; i < 3; i += 1) {
+        const status = statuses[(index + i) % statuses.length];
+        await pool.query(
+          `insert into action_items (action_plan_id, title, due_date, status)
+             values ($1, $2, $3, $4)
+             on conflict do nothing`,
+          [planId, `Ação ${i + 1}`, new Date(Date.now() + i * 7 * 86_400_000).toISOString().slice(0, 10), status],
+        );
+      }
+    }
   }
 
   logger.info('Demo dataset ready');
