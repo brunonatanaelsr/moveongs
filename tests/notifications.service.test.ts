@@ -141,5 +141,91 @@ describe('notification service', () => {
       method: 'POST',
     }));
   });
+
+  it('dispara lembretes para itens de ação próximos do prazo', async () => {
+    addWebhookSubscription({
+      event: 'action_item.due_soon',
+      url: 'https://example.org/hooks/action-items/due-soon',
+    });
+
+    publishNotificationEvent({
+      type: 'action_item.due_soon',
+      data: {
+        actionPlanId: 'plan-1',
+        actionItemId: 'item-1',
+        beneficiaryId: 'ben-123',
+        beneficiaryName: 'Fulana de Tal',
+        title: 'Enviar documentação',
+        dueDate: '2024-06-20',
+        responsible: 'Equipe Social',
+        status: 'in_progress',
+        dueInDays: 1,
+      },
+    });
+
+    await waitForNotificationQueue();
+
+    const emails = getEmailDispatchHistory();
+    const whatsappMessages = getWhatsappDispatchHistory();
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({
+      recipients: ['alerts@example.com'],
+      eventType: 'action_item.due_soon',
+    });
+
+    expect(whatsappMessages).toHaveLength(1);
+    expect(whatsappMessages[0]).toMatchObject({
+      numbers: ['+5511999999999'],
+      eventType: 'action_item.due_soon',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.org/hooks/action-items/due-soon', expect.objectContaining({
+      method: 'POST',
+    }));
+  });
+
+  it('dispara alertas para itens de ação em atraso', async () => {
+    addWebhookSubscription({
+      event: 'action_item.overdue',
+      url: 'https://example.org/hooks/action-items/overdue',
+    });
+
+    publishNotificationEvent({
+      type: 'action_item.overdue',
+      data: {
+        actionPlanId: 'plan-2',
+        actionItemId: 'item-2',
+        beneficiaryId: 'ben-999',
+        beneficiaryName: null,
+        title: 'Realizar visita domiciliar',
+        dueDate: '2024-05-01',
+        responsible: null,
+        status: 'pending',
+        overdueByDays: 4,
+      },
+    });
+
+    await waitForNotificationQueue();
+
+    const emails = getEmailDispatchHistory();
+    const whatsappMessages = getWhatsappDispatchHistory();
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0]).toMatchObject({
+      recipients: ['alerts@example.com'],
+      eventType: 'action_item.overdue',
+    });
+
+    expect(whatsappMessages).toHaveLength(1);
+    expect(whatsappMessages[0]).toMatchObject({
+      numbers: ['+5511999999999'],
+      eventType: 'action_item.overdue',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.org/hooks/action-items/overdue', expect.objectContaining({
+      method: 'POST',
+    }));
+  });
 });
 
