@@ -128,6 +128,23 @@ function mapSubmissionRow(row: any): FormSubmissionRecord {
   };
 }
 
+function buildScopeCondition(
+  column: string,
+  values: unknown[],
+  scopes?: string[] | null,
+): string | null {
+  if (!scopes || scopes.length === 0) {
+    return null;
+  }
+
+  const placeholders = scopes.map((scope) => {
+    values.push(scope);
+    return `$${values.length}`;
+  });
+
+  return `${column} in (${placeholders.join(', ')})`;
+}
+
 export async function listFormTemplates(filters: ListTemplatesFilters): Promise<FormTemplateRecord[]> {
   const clauses: string[] = [];
   const values: unknown[] = [];
@@ -255,6 +272,17 @@ export async function listSubmissionsByBeneficiary(filters: ListSubmissionsFilte
     clauses.push(`fs.form_type = $${values.length}`);
   }
 
+  const scopeCondition = buildScopeCondition('c.project_id', values, filters.allowedProjectIds ?? null);
+  if (scopeCondition) {
+    clauses.push(`exists (
+      select 1
+        from enrollments e
+        join cohorts c on c.id = e.cohort_id
+       where e.beneficiary_id = fs.beneficiary_id
+         and ${scopeCondition}
+    )`);
+  }
+
   const whereClause = clauses.length > 0 ? `and ${clauses.join(' and ')}` : '';
 
   values.push(filters.limit);
@@ -281,7 +309,30 @@ export async function listSubmissionsByBeneficiary(filters: ListSubmissionsFilte
   return rows.map(mapSubmissionSummaryRow);
 }
 
-export async function getFormSubmissionById(id: string): Promise<FormSubmissionRecord | null> {
+export async function getFormSubmissionById(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<FormSubmissionRecord | null> {
+  return getFormSubmissionByIdWithScope(id, allowedProjectIds);
+}
+
+async function getFormSubmissionByIdWithScope(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<FormSubmissionRecord | null> {
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  const values: unknown[] = [id];
+  const scopeCondition = buildScopeCondition('c.project_id', values, scopes);
+  const scopeClause = scopeCondition
+    ? `and exists (
+          select 1
+            from enrollments e
+            join cohorts c on c.id = e.cohort_id
+           where e.beneficiary_id = fs.beneficiary_id
+             and ${scopeCondition}
+        )`
+    : '';
+
   const { rows } = await query(
     `select fs.*, b.full_name as beneficiary_name,
             t.id as template_id,
@@ -293,8 +344,9 @@ export async function getFormSubmissionById(id: string): Promise<FormSubmissionR
        from form_submissions fs
        join beneficiaries b on b.id = fs.beneficiary_id
        left join form_templates t on t.form_type = fs.form_type and t.schema_version = fs.schema_version
-      where fs.id = $1`,
-    [id],
+      where fs.id = $1
+        ${scopeClause}`,
+    values,
   );
 
   if (rows.length === 0) {

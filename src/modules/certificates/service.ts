@@ -1,4 +1,4 @@
-import { AppError } from '../../shared/errors';
+import { AppError, ForbiddenError } from '../../shared/errors';
 import { saveFile, readFile } from '../attachments/storage';
 import { getEnrollmentById } from '../enrollments/repository';
 import { ATTENDANCE_MINIMUM_RATE } from '../enrollments/service';
@@ -18,8 +18,11 @@ export type IssueCertificateParams = {
   metadata?: Record<string, unknown> | null;
 };
 
-export async function issueCertificate(params: IssueCertificateParams): Promise<CertificateRecord> {
-  const enrollment = await getEnrollmentById(params.enrollmentId);
+export async function issueCertificate(
+  params: IssueCertificateParams & { allowedProjectIds?: string[] | null },
+): Promise<CertificateRecord> {
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+  const enrollment = await getEnrollmentById(params.enrollmentId, scopes);
   if (!enrollment) {
     throw new AppError('Enrollment not found', 404);
   }
@@ -91,6 +94,7 @@ export async function listCertificates(params: {
   cohortId?: string;
   limit?: number;
   offset?: number;
+  allowedProjectIds?: string[] | null;
 }): Promise<CertificateRecord[]> {
   const limit = Math.min(params.limit ?? 50, 200);
   const offset = params.offset ?? 0;
@@ -103,6 +107,12 @@ export async function listCertificates(params: {
     throw new AppError('offset cannot be negative', 400);
   }
 
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+
+  if (scopes && params.projectId && !scopes.includes(params.projectId)) {
+    throw new ForbiddenError('Project access denied');
+  }
+
   return listCertificatesRepository({
     enrollmentId: params.enrollmentId,
     beneficiaryId: params.beneficiaryId,
@@ -110,19 +120,26 @@ export async function listCertificates(params: {
     cohortId: params.cohortId,
     limit,
     offset,
+    allowedProjectIds: scopes,
   });
 }
 
-export async function getCertificateOrFail(id: string): Promise<CertificateRecord> {
-  const certificate = await getCertificateById(id);
+export async function getCertificateOrFail(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<CertificateRecord> {
+  const certificate = await getCertificateById(id, allowedProjectIds ?? null);
   if (!certificate) {
     throw new AppError('Certificate not found', 404);
   }
   return certificate;
 }
 
-export async function loadCertificateFile(id: string): Promise<{ metadata: CertificateRecord; buffer: Buffer }> {
-  const metadata = await getCertificateOrFail(id);
+export async function loadCertificateFile(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<{ metadata: CertificateRecord; buffer: Buffer }> {
+  const metadata = await getCertificateOrFail(id, allowedProjectIds ?? null);
   const buffer = await readFile(metadata.filePath);
   return { metadata, buffer };
 }

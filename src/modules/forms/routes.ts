@@ -105,6 +105,10 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid query', 400, parsedQuery.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const limit = parsedQuery.data.limit ?? 25;
     const offset = parsedQuery.data.offset ?? 0;
 
@@ -113,6 +117,7 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       formType: parsedQuery.data.formType,
       limit,
       offset,
+      allowedProjectIds,
     });
 
     return {
@@ -147,7 +152,7 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       signedAt: parsedBody.data.signedAt,
       attachments: parsedBody.data.attachments,
       createdBy: request.user?.sub ?? null,
-    });
+    }, request.user.projectScopes && request.user.projectScopes.length > 0 ? request.user.projectScopes : null);
 
     return reply.code(201).send({ submission });
   });
@@ -160,7 +165,12 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid params', 400, parsedParams.error.flatten());
     }
 
-    const submission = await getSubmissionOrFail(parsedParams.data.id);
+    const submission = await getSubmissionOrFail(
+      parsedParams.data.id,
+      request.user.projectScopes && request.user.projectScopes.length > 0
+        ? request.user.projectScopes
+        : null,
+    );
     return { submission };
   });
 
@@ -172,7 +182,12 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid params', 400, parsedParams.error.flatten());
     }
 
-    const { buffer, filename } = await generateSubmissionPdf(parsedParams.data.id);
+    const { buffer, filename } = await generateSubmissionPdf(
+      parsedParams.data.id,
+      request.user.projectScopes && request.user.projectScopes.length > 0
+        ? request.user.projectScopes
+        : null,
+    );
     reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', `attachment; filename="${filename}"`);
     return reply.send(buffer);
@@ -217,7 +232,13 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       updateData.attachments = parsedBody.data.attachments ?? null;
     }
 
-    const submission = await updateSubmission(parsedParams.data.id, updateData);
+    const submission = await updateSubmission(
+      parsedParams.data.id,
+      updateData,
+      request.user.projectScopes && request.user.projectScopes.length > 0
+        ? request.user.projectScopes
+        : null,
+    );
     return { submission };
   });
 };

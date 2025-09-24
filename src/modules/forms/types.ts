@@ -57,6 +57,7 @@ export type ListSubmissionsFilters = {
   formType?: string;
   limit: number;
   offset: number;
+  allowedProjectIds?: string[] | null;
 };
 
 export type CreateSubmissionInput = {

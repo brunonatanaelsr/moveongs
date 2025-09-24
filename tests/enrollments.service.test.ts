@@ -91,13 +91,14 @@ describe('recordAttendance service', () => {
       justification: null,
     });
 
-    expect(upsertAttendanceMock).toHaveBeenCalledWith({
+    expect(upsertAttendanceMock).toHaveBeenCalledWith(expect.objectContaining({
       enrollmentId: enrollment.id,
       date: '2024-06-01',
       present: true,
       justification: null,
       recordedBy: undefined,
-    });
+      allowedProjectIds: null,
+    }));
     expect(result.summary).toEqual(enrollment.attendance);
     expect(result.risk).toEqual({
       status: 'ok',

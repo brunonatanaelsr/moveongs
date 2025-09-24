@@ -50,11 +50,16 @@ export const certificateRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const certificate = await issueCertificate({
       enrollmentId: parsedParams.data.id,
       issuedBy: request.user?.sub ?? null,
       type: parsedBody.data.type,
       metadata: parsedBody.data.metadata ?? null,
+      allowedProjectIds,
     });
 
     return reply.code(201).send({ certificate });
@@ -73,6 +78,10 @@ export const certificateRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid query', 400, parsedQuery.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const limit = parsedQuery.data.limit ?? 50;
     const offset = parsedQuery.data.offset ?? 0;
 
@@ -80,6 +89,7 @@ export const certificateRoutes: FastifyPluginAsync = async (app) => {
       enrollmentId: parsedParams.data.id,
       limit,
       offset,
+      allowedProjectIds,
     });
 
     return {
@@ -100,7 +110,12 @@ export const certificateRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid params', 400, parsedParams.error.flatten());
     }
 
-    const certificate = await getCertificateOrFail(parsedParams.data.id);
+    const certificate = await getCertificateOrFail(
+      parsedParams.data.id,
+      request.user.projectScopes && request.user.projectScopes.length > 0
+        ? request.user.projectScopes
+        : null,
+    );
     return { certificate };
   });
 
@@ -112,7 +127,12 @@ export const certificateRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid params', 400, parsedParams.error.flatten());
     }
 
-    const { metadata, buffer } = await loadCertificateFile(parsedParams.data.id);
+    const { metadata, buffer } = await loadCertificateFile(
+      parsedParams.data.id,
+      request.user.projectScopes && request.user.projectScopes.length > 0
+        ? request.user.projectScopes
+        : null,
+    );
 
     reply.header('Content-Type', metadata.mimeType);
     reply.header('Content-Disposition', `attachment; filename="${metadata.fileName}"`);
