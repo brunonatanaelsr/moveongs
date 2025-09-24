@@ -5,6 +5,10 @@ import { createUser as createUserRepository, getUserByEmailWithPassword, listUse
 
 const SALT_ROUNDS = 12;
 
+export async function hashPassword(plainPassword: string): Promise<string> {
+  return hash(plainPassword, SALT_ROUNDS);
+}
+
 export type CreateUserInput = {
   name: string;
   email: string;
@@ -19,7 +23,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     throw new AppError('Email already in use', 409);
   }
 
-  const passwordHash = await hash(input.password, SALT_ROUNDS);
+  const passwordHash = await hashPassword(input.password);
   const roles = input.roles.map((role) => ({ slug: role.slug, projectId: role.projectId ?? null }));
 
   return createUserRepository({

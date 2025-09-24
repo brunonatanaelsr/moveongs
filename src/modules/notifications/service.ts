@@ -12,6 +12,12 @@ type EmailNotificationPayload = {
   eventType: NotificationEvent['type'];
 };
 
+type EmailMessage = {
+  subject: string;
+  body: string;
+  recipients?: string[];
+};
+
 type WhatsAppNotificationPayload = {
   numbers: string[];
   message: string;
@@ -78,11 +84,13 @@ export function publishNotificationEvent(event: NotificationEvent) {
   };
 
   const emailMessage = buildEmailMessage(normalizedEvent);
-  if (emailMessage && emailRecipients.length > 0) {
+  const recipients = emailMessage?.recipients ?? emailRecipients;
+
+  if (emailMessage && recipients.length > 0) {
     notificationQueue.enqueue({
       type: 'email',
       payload: {
-        recipients: emailRecipients,
+        recipients,
         subject: emailMessage.subject,
         body: emailMessage.body,
         eventType: normalizedEvent.type,
@@ -183,7 +191,7 @@ async function dispatchWebhook(payload: WebhookJobPayload) {
   }
 }
 
-function buildEmailMessage(event: NotificationEventWithTimestamp): { subject: string; body: string } | null {
+function buildEmailMessage(event: NotificationEventWithTimestamp): EmailMessage | null {
   switch (event.type) {
     case 'enrollment.created':
       return {
@@ -277,6 +285,20 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): { subject: st
         ].filter(Boolean).join('\n'),
       };
     }
+    case 'auth.password_reset_requested':
+      return {
+        subject: 'Redefinição de senha solicitada',
+        recipients: [event.data.email],
+        body: [
+          `Olá ${event.data.name},`,
+          '',
+          'Recebemos um pedido para redefinir sua senha no IMM.',
+          `Use o link abaixo para escolher uma nova senha (válido até ${event.data.expiresAt}):`,
+          event.data.resetUrl,
+          '',
+          'Se você não solicitou essa redefinição, ignore esta mensagem.',
+        ].join('\n'),
+      };
     default:
       return null;
   }
@@ -311,6 +333,8 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
         : `${event.data.overdueByDays} dias`;
       return `Alerta: ação "${event.data.title}" atrasada há ${overdueText} (beneficiário ${beneficiary}).`;
     }
+    case 'auth.password_reset_requested':
+      return null;
     default:
       return null;
   }
