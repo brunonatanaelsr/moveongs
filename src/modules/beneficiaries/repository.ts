@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db';
 import { AppError, NotFoundError } from '../../shared/errors';
+import { decryptPIIValues, encryptPIIValues } from '../../shared/security/pii';
 
 function buildScopeCondition(
   column: string,
@@ -92,25 +93,44 @@ export type UpdateBeneficiaryParams = Partial<Omit<CreateBeneficiaryParams, 'hou
   vulnerabilities?: string[];
 };
 
-function mapBeneficiaryRow(row: any): BeneficiaryRecord {
+async function mapBeneficiaryRow(row: any, client?: PoolClient | null): Promise<BeneficiaryRecord> {
+  const [cpf, rg, rgIssuer, nis, phone1, phone2, email, address, neighborhood, city, state, reference] =
+    await decryptPIIValues(
+      [
+        row.cpf,
+        row.rg,
+        row.rg_issuer,
+        row.nis,
+        row.phone1,
+        row.phone2,
+        row.email,
+        row.address,
+        row.neighborhood,
+        row.city,
+        row.state,
+        row.reference,
+      ],
+      client,
+    );
+
   return {
     id: row.id,
     code: row.code,
     fullName: row.full_name,
     birthDate: row.birth_date ? row.birth_date.toISOString().substring(0, 10) : null,
-    cpf: row.cpf,
-    rg: row.rg,
-    rgIssuer: row.rg_issuer,
+    cpf,
+    rg,
+    rgIssuer,
     rgIssueDate: row.rg_issue_date ? row.rg_issue_date.toISOString().substring(0, 10) : null,
-    nis: row.nis,
-    phone1: row.phone1,
-    phone2: row.phone2,
-    email: row.email,
-    address: row.address,
-    neighborhood: row.neighborhood,
-    city: row.city,
-    state: row.state,
-    reference: row.reference,
+    nis,
+    phone1,
+    phone2,
+    email,
+    address,
+    neighborhood,
+    city,
+    state,
+    reference,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     householdMembers: [],
@@ -184,6 +204,37 @@ async function resolveVulnerabilityIds(client: PoolClient, slugs: string[]): Pro
 
 export async function createBeneficiary(params: CreateBeneficiaryParams): Promise<BeneficiaryRecord> {
   return withTransaction(async (client) => {
+    const [
+      encryptedCpf,
+      encryptedRg,
+      encryptedRgIssuer,
+      encryptedNis,
+      encryptedPhone1,
+      encryptedPhone2,
+      encryptedEmail,
+      encryptedAddress,
+      encryptedNeighborhood,
+      encryptedCity,
+      encryptedState,
+      encryptedReference,
+    ] = await encryptPIIValues(
+      [
+        params.cpf ?? null,
+        params.rg ?? null,
+        params.rgIssuer ?? null,
+        params.nis ?? null,
+        params.phone1 ?? null,
+        params.phone2 ?? null,
+        params.email ?? null,
+        params.address ?? null,
+        params.neighborhood ?? null,
+        params.city ?? null,
+        params.state ?? null,
+        params.reference ?? null,
+      ],
+      client,
+    );
+
     const { rows } = await client.query(
       `insert into beneficiaries (
          code, full_name, birth_date, cpf, rg, rg_issuer, rg_issue_date, nis,
@@ -196,23 +247,23 @@ export async function createBeneficiary(params: CreateBeneficiaryParams): Promis
         params.code ?? null,
         params.fullName,
         params.birthDate ?? null,
-        params.cpf ?? null,
-        params.rg ?? null,
-        params.rgIssuer ?? null,
+        encryptedCpf,
+        encryptedRg,
+        encryptedRgIssuer,
         params.rgIssueDate ?? null,
-        params.nis ?? null,
-        params.phone1 ?? null,
-        params.phone2 ?? null,
-        params.email ?? null,
-        params.address ?? null,
-        params.neighborhood ?? null,
-        params.city ?? null,
-        params.state ?? null,
-        params.reference ?? null,
+        encryptedNis,
+        encryptedPhone1,
+        encryptedPhone2,
+        encryptedEmail,
+        encryptedAddress,
+        encryptedNeighborhood,
+        encryptedCity,
+        encryptedState,
+        encryptedReference,
       ],
     );
 
-    const beneficiary = mapBeneficiaryRow(rows[0]);
+    const beneficiary = await mapBeneficiaryRow(rows[0], client);
 
     if (params.householdMembers.length > 0) {
       for (const member of params.householdMembers) {
@@ -268,24 +319,86 @@ export async function updateBeneficiary(id: string, params: UpdateBeneficiaryPar
 
     const row = existing.rows[0];
 
+    const [
+      existingCpf,
+      existingRg,
+      existingRgIssuer,
+      existingNis,
+      existingPhone1,
+      existingPhone2,
+      existingEmail,
+      existingAddress,
+      existingNeighborhood,
+      existingCity,
+      existingState,
+      existingReference,
+    ] = await decryptPIIValues(
+      [
+        row.cpf,
+        row.rg,
+        row.rg_issuer,
+        row.nis,
+        row.phone1,
+        row.phone2,
+        row.email,
+        row.address,
+        row.neighborhood,
+        row.city,
+        row.state,
+        row.reference,
+      ],
+      client,
+    );
+
     const merged = {
       code: params.code ?? row.code,
       fullName: params.fullName ?? row.full_name,
       birthDate: params.birthDate ?? row.birth_date,
-      cpf: params.cpf ?? row.cpf,
-      rg: params.rg ?? row.rg,
-      rgIssuer: params.rgIssuer ?? row.rg_issuer,
+      cpf: params.cpf ?? existingCpf,
+      rg: params.rg ?? existingRg,
+      rgIssuer: params.rgIssuer ?? existingRgIssuer,
       rgIssueDate: params.rgIssueDate ?? row.rg_issue_date,
-      nis: params.nis ?? row.nis,
-      phone1: params.phone1 ?? row.phone1,
-      phone2: params.phone2 ?? row.phone2,
-      email: params.email ?? row.email,
-      address: params.address ?? row.address,
-      neighborhood: params.neighborhood ?? row.neighborhood,
-      city: params.city ?? row.city,
-      state: params.state ?? row.state,
-      reference: params.reference ?? row.reference,
+      nis: params.nis ?? existingNis,
+      phone1: params.phone1 ?? existingPhone1,
+      phone2: params.phone2 ?? existingPhone2,
+      email: params.email ?? existingEmail,
+      address: params.address ?? existingAddress,
+      neighborhood: params.neighborhood ?? existingNeighborhood,
+      city: params.city ?? existingCity,
+      state: params.state ?? existingState,
+      reference: params.reference ?? existingReference,
     };
+
+    const [
+      encryptedCpf,
+      encryptedRg,
+      encryptedRgIssuer,
+      encryptedNis,
+      encryptedPhone1,
+      encryptedPhone2,
+      encryptedEmail,
+      encryptedAddress,
+      encryptedNeighborhood,
+      encryptedCity,
+      encryptedState,
+      encryptedReference,
+    ] = await encryptPIIValues(
+      [
+        merged.cpf,
+        merged.rg,
+        merged.rgIssuer,
+        merged.nis,
+        merged.phone1,
+        merged.phone2,
+        merged.email,
+        merged.address,
+        merged.neighborhood,
+        merged.city,
+        merged.state,
+        merged.reference,
+      ],
+      client,
+    );
 
     await client.query(
       `update beneficiaries set
@@ -312,19 +425,19 @@ export async function updateBeneficiary(id: string, params: UpdateBeneficiaryPar
         merged.code,
         merged.fullName,
         merged.birthDate ?? null,
-        merged.cpf,
-        merged.rg,
-        merged.rgIssuer,
+        encryptedCpf,
+        encryptedRg,
+        encryptedRgIssuer,
         merged.rgIssueDate ?? null,
-        merged.nis,
-        merged.phone1,
-        merged.phone2,
-        merged.email,
-        merged.address,
-        merged.neighborhood,
-        merged.city,
-        merged.state,
-        merged.reference,
+        encryptedNis,
+        encryptedPhone1,
+        encryptedPhone2,
+        encryptedEmail,
+        encryptedAddress,
+        encryptedNeighborhood,
+        encryptedCity,
+        encryptedState,
+        encryptedReference,
       ],
     );
 
@@ -369,7 +482,7 @@ export async function updateBeneficiary(id: string, params: UpdateBeneficiaryPar
     }
 
     const updated = await client.query('select * from beneficiaries where id = $1', [id]);
-    const beneficiary = mapBeneficiaryRow(updated.rows[0]);
+    const beneficiary = await mapBeneficiaryRow(updated.rows[0], client);
 
     const householdMembers = await loadHouseholdMembers(client, id);
     const vulnerabilities = await loadVulnerabilities(client, id);
@@ -409,7 +522,7 @@ export async function getBeneficiaryById(
       }
     }
 
-    const beneficiary = mapBeneficiaryRow(rows[0]);
+    const beneficiary = await mapBeneficiaryRow(rows[0], client);
     const householdMembers = await loadHouseholdMembers(client, id);
     const vulnerabilities = await loadVulnerabilities(client, id);
 
@@ -477,15 +590,22 @@ export async function listBeneficiaries(params: {
     values,
   );
 
-  return rows.map((row) => ({
-    id: row.id,
-    code: row.code,
-    fullName: row.full_name,
-    birthDate: row.birth_date ? row.birth_date.toISOString().substring(0, 10) : null,
-    cpf: row.cpf,
-    phone1: row.phone1,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
-    vulnerabilities: row.vulnerabilities ?? [],
-  }));
+  const results = await Promise.all(
+    rows.map(async (row) => {
+      const [cpf, phone1] = await decryptPIIValues([row.cpf, row.phone1]);
+      return {
+        id: row.id,
+        code: row.code,
+        fullName: row.full_name,
+        birthDate: row.birth_date ? row.birth_date.toISOString().substring(0, 10) : null,
+        cpf,
+        phone1,
+        createdAt: row.created_at.toISOString(),
+        updatedAt: row.updated_at.toISOString(),
+        vulnerabilities: row.vulnerabilities ?? [],
+      };
+    }),
+  );
+
+  return results;
 }

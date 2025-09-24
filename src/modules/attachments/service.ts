@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { readFile, saveFile, deleteFile } from './storage';
 import {
   AttachmentRecord,
@@ -9,6 +10,44 @@ import {
 } from './repository';
 import { AppError } from '../../shared/errors';
 import { recordAuditLog } from '../../shared/audit';
+import { getEnv } from '../../config/env';
+
+const DEFAULT_ALLOWED_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'application/pdf',
+  'application/zip',
+  'text/plain',
+];
+
+function getAllowedMimeTypes(): Set<string> {
+  const env = getEnv();
+  if (env.ATTACHMENT_ALLOWED_MIME_TYPES) {
+    return new Set(
+      env.ATTACHMENT_ALLOWED_MIME_TYPES.split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    );
+  }
+
+  return new Set(DEFAULT_ALLOWED_MIME_TYPES);
+}
+
+function validateUpload(buffer: Buffer, mimeType?: string | null) {
+  const env = getEnv();
+  const maxSize = Number(env.ATTACHMENT_MAX_SIZE_BYTES);
+
+  if (buffer.length > maxSize) {
+    throw new AppError('Uploaded file exceeds allowed size', 413);
+  }
+
+  if (mimeType) {
+    const allowed = getAllowedMimeTypes();
+    if (!allowed.has(mimeType)) {
+      throw new AppError('Unsupported file type', 415);
+    }
+  }
+}
 
 export async function uploadAttachment(params: {
   ownerType: string;
@@ -22,14 +61,17 @@ export async function uploadAttachment(params: {
     throw new AppError('Empty file upload is not allowed', 400);
   }
 
+  validateUpload(params.buffer, params.mimeType);
+
   const checksum = createHash('sha256').update(params.buffer).digest('hex');
-  const saved = await saveFile(params.buffer, params.filename ?? undefined);
+  const saved = await saveFile(params.buffer, params.filename ?? undefined, params.mimeType ?? null);
+  const sanitizedName = params.filename ? path.basename(params.filename) : saved.fileName;
 
   const attachment = await insertAttachment({
     ownerType: params.ownerType,
     ownerId: params.ownerId,
     filePath: saved.filePath,
-    fileName: params.filename ?? saved.fileName,
+    fileName: sanitizedName,
     mimeType: params.mimeType ?? null,
     sizeBytes: params.buffer.length,
     checksum,
