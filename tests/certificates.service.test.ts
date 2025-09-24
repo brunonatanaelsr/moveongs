@@ -125,7 +125,11 @@ describe('certificate service', () => {
       metadata: { customNote: 'Parabéns!' },
     });
 
-    expect(saveFileMock).toHaveBeenCalledWith(expect.any(Buffer), expect.stringContaining('certificado'));
+    expect(saveFileMock).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.stringContaining('certificado'),
+      'application/pdf',
+    );
 
     const insertPayload = insertCertificateMock.mock.calls[0][0];
     expect(insertPayload).toMatchObject({

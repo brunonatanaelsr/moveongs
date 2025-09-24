@@ -1,5 +1,5 @@
 import { compare } from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { withTransaction } from '../../db';
 import { AppError, UnauthorizedError } from '../../shared/errors';
 import { publishNotificationEvent } from '../notifications/service';
@@ -11,7 +11,14 @@ import {
   findPasswordResetTokenByHash,
   insertPasswordResetToken,
   markPasswordResetTokenUsed,
+  insertRefreshTokenRecord,
+  findRefreshTokenByHash,
+  markRefreshTokenRotated,
+  revokeRefreshToken,
+  revokeRefreshTokensForUser,
+  findRefreshTokenById,
 } from './repository';
+import { getEnv } from '../../config/env';
 
 export type AuthenticatedUser = {
   id: string;
@@ -24,6 +31,12 @@ export type AuthenticatedUser = {
 const RESET_TOKEN_BYTE_LENGTH = 32;
 const RESET_TOKEN_EXPIRATION_MINUTES = 60;
 const DEFAULT_RESET_URL = 'https://imm.local/reset-password';
+const REFRESH_TOKEN_BYTE_LENGTH = 48;
+
+type RefreshTokenIssueResult = {
+  token: string;
+  expiresAt: Date;
+};
 
 export async function validateCredentials(email: string, password: string): Promise<AuthenticatedUser> {
   const user = await getUserByEmailWithPassword(email);
@@ -45,6 +58,90 @@ export async function validateCredentials(email: string, password: string): Prom
     roles: user.roles,
     permissions: user.permissions,
   };
+}
+
+function hashRefreshToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function getRefreshTokenTtlMs(): number {
+  const env = getEnv();
+  return Number(env.TOKEN_ROTATION_TTL_MINUTES) * 60 * 1000;
+}
+
+function getReuseWindowMs(): number {
+  const env = getEnv();
+  return Number(env.TOKEN_ROTATION_REUSE_WINDOW_MINUTES) * 60 * 1000;
+}
+
+async function issueRefreshToken(userId: string, client?: import('pg').PoolClient): Promise<{ token: string; recordId: string; expiresAt: Date }> {
+  const ttlMs = getRefreshTokenTtlMs();
+  const token = randomBytes(REFRESH_TOKEN_BYTE_LENGTH).toString('base64url');
+  const tokenHash = hashRefreshToken(token);
+  const expiresAt = new Date(Date.now() + ttlMs);
+  const recordId = randomUUID();
+
+  await insertRefreshTokenRecord({ id: recordId, userId, tokenHash, expiresAt }, client);
+
+  return { token, recordId, expiresAt };
+}
+
+export async function issueSessionRefreshToken(userId: string): Promise<RefreshTokenIssueResult> {
+  const result = await issueRefreshToken(userId);
+  return { token: result.token, expiresAt: result.expiresAt };
+}
+
+export async function rotateSessionRefreshToken(
+  token: string,
+): Promise<{ newToken: string; userId: string; expiresAt: Date }> {
+  const tokenHash = hashRefreshToken(token);
+
+  return withTransaction(async (client) => {
+    const record = await findRefreshTokenByHash(tokenHash, client);
+
+    if (!record || record.revokedAt) {
+      throw new UnauthorizedError('Invalid refresh token');
+    }
+
+    const now = Date.now();
+
+    if (record.expiresAt.getTime() <= now) {
+      throw new UnauthorizedError('Expired refresh token');
+    }
+
+    if (record.rotatedAt) {
+      if (record.replacedByTokenId) {
+        const replacement = await findRefreshTokenById(record.replacedByTokenId, client);
+        if (
+          replacement &&
+          !replacement.revokedAt &&
+          replacement.expiresAt.getTime() > now &&
+          record.rotatedAt.getTime() + getReuseWindowMs() >= now
+        ) {
+          throw new AppError('Refresh token already rotated', 409);
+        }
+      }
+      throw new UnauthorizedError('Refresh token already used');
+    }
+
+    const { token: newToken, recordId, expiresAt } = await issueRefreshToken(record.userId, client);
+    await markRefreshTokenRotated({ id: record.id, replacedByTokenId: recordId }, client);
+
+    return { newToken, userId: record.userId, expiresAt };
+  });
+}
+
+export async function revokeRefreshTokenValue(token: string): Promise<void> {
+  const tokenHash = hashRefreshToken(token);
+
+  await withTransaction(async (client) => {
+    const record = await findRefreshTokenByHash(tokenHash, client);
+    if (!record) {
+      return;
+    }
+
+    await revokeRefreshToken(record.id, client);
+  });
 }
 
 function generateResetToken(): string {
@@ -129,5 +226,6 @@ export async function resetPasswordWithToken(token: string, newPassword: string)
           and id <> $2`,
       [record.userId, record.id],
     );
+    await revokeRefreshTokensForUser(record.userId, client);
   });
 }

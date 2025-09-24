@@ -2,12 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { ForbiddenError, UnauthorizedError } from '../../shared/errors';
 
 interface AuthorizationOptions {
-  roles?: string[];
-  permissions?: string[];
+  roles?: readonly string[];
+  permissions?: readonly string[];
   strategy?: 'any' | 'all';
 }
 
-type AuthorizationRequirement = string | string[] | AuthorizationOptions;
+type AuthorizationRequirement = string | readonly string[] | AuthorizationOptions;
+
+function isAuthorizationOptions(requirement: AuthorizationRequirement): requirement is AuthorizationOptions {
+  return typeof requirement === 'object' && requirement !== null && !Array.isArray(requirement);
+}
 
 export async function registerAuthDecorators(app: FastifyInstance) {
   app.decorate('authenticate', async (request) => {
@@ -61,17 +65,21 @@ function normalizeRequirement(requirement: AuthorizationRequirement): Required<A
   }
 
   if (Array.isArray(requirement)) {
-    return { roles: requirement, permissions: [], strategy: 'any' };
+    return { roles: Array.from(requirement), permissions: [], strategy: 'any' };
   }
 
-  return {
-    roles: requirement.roles ?? [],
-    permissions: requirement.permissions ?? [],
-    strategy: requirement.strategy ?? 'any',
-  };
+  if (isAuthorizationOptions(requirement)) {
+    return {
+      roles: Array.from(requirement.roles ?? []),
+      permissions: Array.from(requirement.permissions ?? []),
+      strategy: requirement.strategy ?? 'any',
+    };
+  }
+
+  return { roles: [], permissions: [], strategy: 'any' };
 }
 
-function matches(set: Set<string>, expected: string[], strategy: 'any' | 'all') {
+function matches(set: Set<string>, expected: readonly string[], strategy: 'any' | 'all') {
   if (strategy === 'all') {
     return expected.every((value) => set.has(value));
   }

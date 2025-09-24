@@ -1,7 +1,10 @@
 import { config } from 'dotenv';
 import { z } from 'zod';
 
+import { hydrateProcessEnvFromVault } from './secret-vault';
+
 config();
+hydrateProcessEnvFromVault();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -31,6 +34,27 @@ const envSchema = z.object({
     .enum(['always_on', 'always_off', 'traceidratio', 'parentbased_always_on', 'parentbased_always_off'])
     .default('parentbased_always_on'),
   OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
+  SECRET_VAULT_PATH: z.string().optional(),
+  PII_ENCRYPTION_KEY: z.string().min(32).optional(),
+  PII_ENCRYPTION_KMS_KEY_ID: z.string().optional(),
+  PII_ENCRYPTION_CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
+  AUDIT_LOG_SIGNING_KEY: z.string().min(32).optional(),
+  ATTACHMENTS_STORAGE: z.enum(['filesystem', 's3']).default('filesystem'),
+  ATTACHMENT_ALLOWED_MIME_TYPES: z.string().optional(),
+  ATTACHMENT_MAX_SIZE_BYTES: z.string().regex(/^[0-9]+$/).default('10485760'),
+  S3_BUCKET: z.string().optional(),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('false'),
+  S3_SERVER_SIDE_ENCRYPTION: z.string().optional(),
+  DATA_RETENTION_DAYS: z.string().regex(/^[0-9]+$/).default('365'),
+  DATA_RETENTION_ANONYMIZE_DAYS: z.string().regex(/^[0-9]+$/).default('180'),
+  RATE_LIMIT_MAX: z.string().regex(/^[0-9]+$/).default('100'),
+  RATE_LIMIT_TIME_WINDOW_MS: z.string().regex(/^[0-9]+$/).default('60000'),
+  TOKEN_ROTATION_TTL_MINUTES: z.string().regex(/^[0-9]+$/).default('1440'),
+  TOKEN_ROTATION_REUSE_WINDOW_MINUTES: z.string().regex(/^[0-9]+$/).default('5'),
 });
 
 type Env = z.infer<typeof envSchema>;

@@ -115,7 +115,7 @@ export async function startObservability(): Promise<ObservabilityController> {
   activeSdk = new NodeSDK({
     resource,
     traceExporter,
-    metricReader,
+    metricReader: metricReader as any,
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-http': {
@@ -125,7 +125,6 @@ export async function startObservability(): Promise<ObservabilityController> {
         },
       }),
     ],
-    traceSampler: sampler,
   });
 
   try {

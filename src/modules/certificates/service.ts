@@ -71,7 +71,7 @@ export async function issueCertificate(
   });
 
   const safeFileName = buildCertificateFileName(enrollment.beneficiaryName, issuedAt);
-  const saved = await saveFile(pdfBuffer, safeFileName);
+  const saved = await saveFile(pdfBuffer, safeFileName, 'application/pdf');
 
   return insertCertificate({
     enrollmentId: enrollment.id,
