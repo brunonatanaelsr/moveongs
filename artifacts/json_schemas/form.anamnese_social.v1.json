@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Anamnese Social",
+  "type": "object",
+  "description": "Instrumento para levantamento de informações socioeconômicas, familiares e de saúde da beneficiária no primeiro atendimento.",
+  "properties": {
+    "identificacao": {
+      "title": "Identificação",
+      "type": "object",
+      "properties": {
+        "nome": {"type": "string"},
+        "nome_social": {"type": "string"},
+        "data_nascimento": {"type": "string", "format": "date"},
+        "idade": {"type": "integer", "minimum": 0},
+        "estado_civil": {"type": "string"},
+        "genero": {"type": "string"},
+        "responsavel_familiar": {"type": "string"},
+        "telefone_principal": {"type": "string"},
+        "telefones_secundarios": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "email": {"type": "string", "format": "email"},
+        "endereco": {
+          "type": "object",
+          "properties": {
+            "logradouro": {"type": "string"},
+            "numero": {"type": "string"},
+            "complemento": {"type": "string"},
+            "bairro": {"type": "string"},
+            "cidade": {"type": "string"},
+            "estado": {"type": "string"},
+            "cep": {"type": "string"}
+          },
+          "required": ["logradouro", "bairro", "cidade", "estado"]
+        }
+      },
+      "required": ["nome", "data_nascimento"]
+    },
+    "documentos": {
+      "title": "Documentos",
+      "type": "object",
+      "properties": {
+        "cpf": {"type": "string"},
+        "rg": {"type": "string"},
+        "nis": {"type": "string"},
+        "cns": {"type": "string"},
+        "outros": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "composicao_familiar": {
+      "title": "Composição Familiar",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nome": {"type": "string"},
+          "parentesco": {"type": "string"},
+          "idade": {"type": "integer", "minimum": 0},
+          "escolaridade": {"type": "string"},
+          "ocupacao": {"type": "string"},
+          "renda_mensal": {"type": "number", "minimum": 0},
+          "observacoes": {"type": "string"}
+        },
+        "required": ["nome", "parentesco"]
+      }
+    },
+    "escolaridade_formacao": {
+      "title": "Escolaridade e Formação",
+      "type": "object",
+      "properties": {
+        "nivel": {"type": "string"},
+        "situacao": {"type": "string"},
+        "alfabetizado": {"type": "boolean"},
+        "cursos_realizados": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "dificuldades_aprendizagem": {"type": "string"}
+      }
+    },
+    "trabalho_renda": {
+      "title": "Trabalho e Renda",
+      "type": "object",
+      "properties": {
+        "ocupacao_principal": {"type": "string"},
+        "situacao_trabalho": {"type": "string"},
+        "renda_mensal": {"type": "number", "minimum": 0},
+        "fonte_renda": {"type": "string"},
+        "beneficios_sociais": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "despesas_mensais": {
+          "type": "object",
+          "properties": {
+            "moradia": {"type": "number", "minimum": 0},
+            "alimentacao": {"type": "number", "minimum": 0},
+            "saude": {"type": "number", "minimum": 0},
+            "educacao": {"type": "number", "minimum": 0},
+            "transporte": {"type": "number", "minimum": 0},
+            "outros": {"type": "number", "minimum": 0}
+          }
+        }
+      }
+    },
+    "saude": {
+      "title": "Saúde",
+      "type": "object",
+      "properties": {
+        "possui_doenca_cronica": {"type": "boolean"},
+        "descricao_doencas": {"type": "string"},
+        "acompanhamento_saude": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "possui_deficiencia": {"type": "boolean"},
+        "tipo_deficiencia": {"type": "string"},
+        "uso_medicamentos": {"type": "boolean"},
+        "descricao_medicamentos": {"type": "string"},
+        "servicos_saude_utilizados": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "habitacao": {
+      "title": "Habitação",
+      "type": "object",
+      "properties": {
+        "tipo_moradia": {"type": "string"},
+        "situacao_moradia": {"type": "string"},
+        "numero_comodos": {"type": "integer", "minimum": 0},
+        "material_predominante": {"type": "string"},
+        "numero_moradores": {"type": "integer", "minimum": 0},
+        "servicos_basicos": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "risco_moradia": {"type": "string"},
+        "observacoes": {"type": "string"}
+      }
+    },
+    "rede_apoio": {
+      "title": "Rede de Apoio",
+      "type": "object",
+      "properties": {
+        "participa_grupo_comunitario": {"type": "boolean"},
+        "grupos": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "instituicoes_acompanhamento": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nome": {"type": "string"},
+              "tipo": {"type": "string"},
+              "contato": {"type": "string"}
+            }
+          }
+        },
+        "familia_rede_apoio": {"type": "string"}
+      }
+    },
+    "historico_participacao": {
+      "title": "Histórico de Participação",
+      "type": "object",
+      "properties": {
+        "motivo_busca": {"type": "string"},
+        "expectativas": {"type": "string"},
+        "historico_atendimentos": {"type": "string"},
+        "acoes_anteriores": {"type": "string"},
+        "resultados_obtidos": {"type": "string"}
+      }
+    },
+    "avaliacao_tecnica": {
+      "title": "Avaliação Técnica",
+      "type": "object",
+      "properties": {
+        "diagnostico_inicial": {"type": "string"},
+        "necessidades_identificadas": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "potencialidades_identificadas": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "encaminhamentos_recomendados": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "responsavel_preenchimento": {"type": "string"},
+        "data_preenchimento": {"type": "string", "format": "date"}
+      },
+      "required": ["responsavel_preenchimento", "data_preenchimento"]
+    }
+  },
+  "required": ["identificacao", "avaliacao_tecnica"]
+}

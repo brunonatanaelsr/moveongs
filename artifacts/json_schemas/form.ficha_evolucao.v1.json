@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ficha de Evolução",
+  "type": "object",
+  "description": "Registro estruturado do acompanhamento periódico das beneficiárias.",
+  "properties": {
+    "identificacao_atendimento": {
+      "title": "Identificação do Atendimento",
+      "type": "object",
+      "properties": {
+        "beneficiaria_nome": {"type": "string"},
+        "beneficiaria_id": {"type": "string"},
+        "data_atendimento": {"type": "string", "format": "date"},
+        "horario_inicio": {"type": "string"},
+        "horario_termino": {"type": "string"},
+        "profissional_responsavel": {"type": "string"},
+        "funcao_profissional": {"type": "string"},
+        "tipo_atendimento": {"type": "string"},
+        "local_atendimento": {"type": "string"},
+        "participantes": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "vinculo_projeto": {"type": "string"}
+      },
+      "required": ["beneficiaria_nome", "data_atendimento", "profissional_responsavel"]
+    },
+    "descricao_atendimento": {
+      "title": "Descrição do Atendimento",
+      "type": "object",
+      "properties": {
+        "objetivos_trabalhados": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "temas_abordados": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "relato_sessao": {"type": "string"},
+        "participacao_beneficiaria": {"type": "string"},
+        "recursos_utilizados": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "observacoes": {"type": "string"}
+      },
+      "required": ["relato_sessao"]
+    },
+    "avaliacao": {
+      "title": "Avaliação",
+      "type": "object",
+      "properties": {
+        "avaliacao_beneficiaria": {"type": "string"},
+        "avaliacao_profissional": {"type": "string"},
+        "mudancas_observadas": {"type": "string"},
+        "dificuldades_encontradas": {"type": "string"},
+        "necessidades_identificadas": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "encaminhamentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "descricao": {"type": "string"},
+              "destino": {"type": "string"},
+              "prazo": {"type": "string", "format": "date"}
+            },
+            "required": ["descricao"]
+          }
+        }
+      }
+    },
+    "plano_proximos_passos": {
+      "title": "Plano e Próximos Passos",
+      "type": "object",
+      "properties": {
+        "acoes_planejadas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "descricao": {"type": "string"},
+              "responsavel": {"type": "string"},
+              "prazo": {"type": "string", "format": "date"},
+              "status": {"type": "string"}
+            },
+            "required": ["descricao"]
+          }
+        },
+        "acompanhamento_previsto": {"type": "string"},
+        "data_proximo_atendimento": {"type": "string", "format": "date"},
+        "metas_curto_prazo": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "metas_medio_prazo": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "anexos_referencias": {
+      "title": "Anexos e Referências",
+      "type": "object",
+      "properties": {
+        "documentos": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "links_referencia": {
+          "type": "array",
+          "items": {"type": "string", "format": "uri"}
+        }
+      }
+    },
+    "assinaturas": {
+      "title": "Assinaturas",
+      "type": "object",
+      "properties": {
+        "profissional": {
+          "type": "object",
+          "properties": {
+            "nome": {"type": "string"},
+            "assinatura": {"type": "string"},
+            "data": {"type": "string", "format": "date"}
+          }
+        },
+        "beneficiaria": {
+          "type": "object",
+          "properties": {
+            "nome": {"type": "string"},
+            "assinatura": {"type": "string"},
+            "data": {"type": "string", "format": "date"}
+          }
+        }
+      }
+    },
+    "metadados": {
+      "title": "Metadados do Registro",
+      "type": "object",
+      "properties": {
+        "registrado_em": {"type": "string", "format": "date-time"},
+        "ultima_atualizacao": {"type": "string", "format": "date-time"},
+        "observacoes_internas": {"type": "string"}
+      }
+    }
+  },
+  "required": ["identificacao_atendimento", "descricao_atendimento"]
+}
