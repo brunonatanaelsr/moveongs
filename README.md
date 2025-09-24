@@ -121,6 +121,7 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
   - `NOTIFICATIONS_WEBHOOK_TIMEOUT_MS` e `NOTIFICATIONS_WEBHOOK_SECRET` para chamadas HTTP assíncronas.
 - Endpoints protegidos (`/notifications/webhooks`) permitem listar, cadastrar e remover webhooks por evento chave.
 - Eventos de matrículas, presenças e consentimentos alimentam automaticamente fila de envios multi canal.
+- Visão detalhada de arquitetura, observabilidade e reprocessamento em [`docs/notifications/README.md`](docs/notifications/README.md).
 
 ## Próximos passos sugeridos
 
