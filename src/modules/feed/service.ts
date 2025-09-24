@@ -4,16 +4,21 @@ import {
   CommentRecord,
   PostRecord,
   PostVisibility,
+  ReactionRecord,
   countPendingLgpdConsents,
   createComment as insertComment,
   createPost as insertPost,
+  createReaction as insertReaction,
   deleteComment as removeCommentRow,
   deletePost as removePostRow,
+  deleteReaction as removeReactionRow,
   getCommentById,
   getPostById,
+  getReactionById,
   listBeneficiaryProjects,
   listComments,
   listPosts,
+  listReactions,
   updatePost as persistPost,
 } from './repository';
 
@@ -215,6 +220,79 @@ export async function deleteFeedPost(id: string, params: {
   });
 
   return current;
+}
+
+export async function listFeedPostReactions(postId: string): Promise<{ post: PostRecord; reactions: ReactionRecord[] }> {
+  const post = await getPostById(postId);
+  if (!post) {
+    throw new NotFoundError('Post não encontrado');
+  }
+
+  const reactions = await listReactions(postId);
+  return { post, reactions };
+}
+
+export async function createFeedReaction(params: {
+  postId: string;
+  authorId: string;
+  type: string;
+}): Promise<ReactionRecord> {
+  const post = await getPostById(params.postId);
+  if (!post) {
+    throw new NotFoundError('Post não encontrado');
+  }
+
+  if (post.visibility === 'hidden') {
+    throw new ForbiddenError('Reações não são permitidas em posts ocultos');
+  }
+
+  const reaction = await insertReaction({
+    postId: params.postId,
+    authorId: params.authorId,
+    type: params.type,
+  });
+
+  await recordAuditLog({
+    userId: params.authorId,
+    entity: 'feed_reaction',
+    entityId: reaction.id,
+    action: 'create',
+    beforeData: null,
+    afterData: reaction,
+  });
+
+  return reaction;
+}
+
+export async function deleteFeedReaction(
+  postId: string,
+  reactionId: string,
+  params: {
+    requestorId: string;
+    canModerate: boolean;
+  },
+): Promise<ReactionRecord> {
+  const reaction = await getReactionById(reactionId);
+  if (!reaction || reaction.postId !== postId) {
+    throw new NotFoundError('Reação não encontrada');
+  }
+
+  if (!params.canModerate && reaction.author.id !== params.requestorId) {
+    throw new ForbiddenError('Você não pode remover esta reação');
+  }
+
+  await removeReactionRow(reactionId);
+
+  await recordAuditLog({
+    userId: params.requestorId,
+    entity: 'feed_reaction',
+    entityId: reactionId,
+    action: 'delete',
+    beforeData: reaction,
+    afterData: null,
+  });
+
+  return reaction;
 }
 
 export async function createFeedComment(params: {

@@ -24,6 +24,15 @@ export type CommentRecord = {
   createdAt: string;
 };
 
+export type ReactionRecord = {
+  id: string;
+  postId: string;
+  author: { id: string; name: string | null; avatarUrl: string | null };
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function parseTags(raw: unknown): string[] {
   if (!raw) {
     return [];
@@ -99,6 +108,23 @@ function mapComment(row: any): CommentRecord {
     },
     body: row.body,
     createdAt: toIso(row.created_at) ?? new Date().toISOString(),
+  };
+}
+
+function mapReaction(row: any): ReactionRecord {
+  const fallbackDate = new Date().toISOString();
+
+  return {
+    id: row.id,
+    postId: row.post_id,
+    author: {
+      id: row.author_id,
+      name: row.author_display_name ?? row.author_name ?? null,
+      avatarUrl: row.author_avatar ?? null,
+    },
+    type: row.type,
+    createdAt: toIso(row.created_at) ?? fallbackDate,
+    updatedAt: toIso(row.updated_at) ?? fallbackDate,
   };
 }
 
@@ -306,6 +332,60 @@ export async function getCommentById(id: string): Promise<CommentRecord | null> 
 
 export async function deleteComment(id: string): Promise<void> {
   await query('delete from comments where id = $1', [id]);
+}
+
+export async function listReactions(postId: string): Promise<ReactionRecord[]> {
+  const { rows } = await query(
+    `select r.*,\n            u.name as author_name,\n            coalesce(up.display_name, u.name) as author_display_name,\n            up.avatar_url as author_avatar\n       from post_reactions r\n       join users u on u.id = r.author_id\n  left join user_profiles up on up.user_id = u.id\n      where r.post_id = $1\n      order by r.created_at asc, r.id asc`,
+    [postId],
+  );
+
+  return rows.map(mapReaction);
+}
+
+export async function createReaction(params: {
+  postId: string;
+  authorId: string;
+  type: string;
+}): Promise<ReactionRecord> {
+  const id = randomUUID();
+  const { rows } = await query<{ id: string }>(
+    `insert into post_reactions (id, post_id, author_id, type)\n     values ($1, $2, $3, $4)\n     on conflict (post_id, author_id)\n     do update set type = excluded.type, updated_at = now()\n     returning id`,
+    [id, params.postId, params.authorId, params.type],
+  );
+
+  const insertedId = rows[0]?.id;
+  if (!insertedId) {
+    throw new AppError('Failed to create reaction');
+  }
+
+  const { rows: reactionRows } = await query(
+    `select r.*,\n            u.name as author_name,\n            coalesce(up.display_name, u.name) as author_display_name,\n            up.avatar_url as author_avatar\n       from post_reactions r\n       join users u on u.id = r.author_id\n  left join user_profiles up on up.user_id = u.id\n      where r.id = $1`,
+    [insertedId],
+  );
+
+  if (reactionRows.length === 0) {
+    throw new AppError('Failed to load reaction after creation');
+  }
+
+  return mapReaction(reactionRows[0]);
+}
+
+export async function getReactionById(id: string): Promise<ReactionRecord | null> {
+  const { rows } = await query(
+    `select r.*,\n            u.name as author_name,\n            coalesce(up.display_name, u.name) as author_display_name,\n            up.avatar_url as author_avatar\n       from post_reactions r\n       join users u on u.id = r.author_id\n  left join user_profiles up on up.user_id = u.id\n      where r.id = $1`,
+    [id],
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return mapReaction(rows[0]);
+}
+
+export async function deleteReaction(id: string): Promise<void> {
+  await query('delete from post_reactions where id = $1', [id]);
 }
 
 export async function listBeneficiaryProjects(beneficiaryId: string): Promise<string[]> {

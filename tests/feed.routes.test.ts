@@ -45,6 +45,7 @@ async function loadSchema() {
   const files = [
     path.join(__dirname, '../artifacts/sql/0001_initial.sql'),
     path.join(__dirname, '../artifacts/sql/0002_rbac_and_profiles.sql'),
+    path.join(__dirname, '../artifacts/sql/0004_feed_reactions.sql'),
   ];
 
   for (const sqlPath of files) {
@@ -264,6 +265,66 @@ describe('Feed routes', () => {
       },
     });
     expect(adminPost.statusCode).toBe(201);
+  });
+
+  it('allows admin to create, list and delete post reactions', async () => {
+    const token = await login(app, 'admin@imm.local', 'ChangeMe123!');
+
+    const createPostResponse = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {
+        body: 'Post para testar reações',
+      },
+    });
+
+    expect(createPostResponse.statusCode).toBe(201);
+    const post = createPostResponse.json().post;
+    expect(post).toBeDefined();
+
+    const createReactionResponse = await app.inject({
+      method: 'POST',
+      url: `/feed/posts/${post.id}/reactions`,
+      headers: { Authorization: `Bearer ${token}` },
+      payload: {
+        type: 'like',
+      },
+    });
+
+    expect(createReactionResponse.statusCode).toBe(201);
+    const createdReaction = createReactionResponse.json().reaction;
+    expect(createdReaction).toMatchObject({ postId: post.id, type: 'like' });
+
+    const listReactionsResponse = await app.inject({
+      method: 'GET',
+      url: `/feed/posts/${post.id}/reactions`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(listReactionsResponse.statusCode).toBe(200);
+    const listedReactions = listReactionsResponse.json().reactions as any[];
+    expect(listedReactions).toEqual(expect.arrayContaining([expect.objectContaining({ id: createdReaction.id })]));
+
+    const deleteReactionResponse = await app.inject({
+      method: 'DELETE',
+      url: `/feed/posts/${post.id}/reactions/${createdReaction.id}`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(deleteReactionResponse.statusCode).toBe(200);
+    const deletedReaction = deleteReactionResponse.json().reaction;
+    expect(deletedReaction.id).toBe(createdReaction.id);
+
+    const listAfterDeletion = await app.inject({
+      method: 'GET',
+      url: `/feed/posts/${post.id}/reactions`,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(listAfterDeletion.statusCode).toBe(200);
+    const reactionsAfterDeletion = listAfterDeletion.json().reactions as any[];
+    expect(reactionsAfterDeletion).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: createdReaction.id })]));
   });
 
   it('requires moderation permission to view hidden posts', async () => {

@@ -2,10 +2,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import { AppError } from '../../shared/errors';
 import {
   createFeedComment,
+  createFeedReaction,
   createFeedPost,
   deleteFeedComment,
+  deleteFeedReaction,
   deleteFeedPost,
   getFeedPost,
+  listFeedPostReactions,
   hideFeedPost,
   listFeedPosts,
   updateFeedPost,
@@ -13,9 +16,11 @@ import {
 import {
   commentIdParamSchema,
   createCommentBodySchema,
+  createReactionBodySchema,
   createPostBodySchema,
   listPostsQuerySchema,
   postIdParamSchema,
+  postReactionParamsSchema,
   updatePostBodySchema,
 } from './schemas';
 import { ensureProjectScope, hasPermission, shouldIncludeHidden } from './utils';
@@ -69,6 +74,27 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { post, comments };
+  });
+
+  app.get('/feed/posts/:id/reactions', {
+    preHandler: [app.authenticate, app.authorize(READ_REQUIREMENTS)],
+  }, async (request) => {
+    const params = postIdParamSchema.safeParse(request.params);
+    if (!params.success) {
+      throw new AppError('Parâmetros inválidos', 400, params.error.flatten());
+    }
+
+    const { post, reactions } = await listFeedPostReactions(params.data.id);
+
+    if (post.project?.id) {
+      ensureProjectScope(request, post.project.id);
+    }
+
+    if (post.visibility === 'hidden' && !hasPermission(request, 'activities:moderate') && post.author.id !== request.user.sub) {
+      throw new AppError('Post não disponível', 404);
+    }
+
+    return { reactions };
   });
 
   app.post('/feed/posts', {
@@ -146,6 +172,64 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
     const post = await deleteFeedPost(params.data.id, { requestorId: request.user.sub });
     return { post };
+  });
+
+  app.post('/feed/posts/:id/reactions', {
+    preHandler: [app.authenticate, app.authorize(CREATE_REQUIREMENTS)],
+  }, async (request, reply) => {
+    const params = postIdParamSchema.safeParse(request.params);
+    const body = createReactionBodySchema.safeParse(request.body);
+
+    if (!params.success || !body.success) {
+      throw new AppError('Requisição inválida', 400, {
+        params: params.success ? undefined : params.error.flatten(),
+        body: body.success ? undefined : body.error.flatten(),
+      });
+    }
+
+    const { post } = await getFeedPost(params.data.id);
+
+    if (post.project?.id) {
+      ensureProjectScope(request, post.project.id);
+    }
+
+    if (post.visibility === 'hidden' && !hasPermission(request, 'activities:moderate') && post.author.id !== request.user.sub) {
+      throw new AppError('Post não disponível', 404);
+    }
+
+    const reaction = await createFeedReaction({
+      postId: params.data.id,
+      authorId: request.user.sub,
+      type: body.data.type,
+    });
+
+    return reply.code(201).send({ reaction });
+  });
+
+  app.delete('/feed/posts/:id/reactions/:reactionId', {
+    preHandler: [app.authenticate, app.authorize(CREATE_REQUIREMENTS)],
+  }, async (request) => {
+    const params = postReactionParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      throw new AppError('Parâmetros inválidos', 400, params.error.flatten());
+    }
+
+    const { post } = await getFeedPost(params.data.id);
+
+    if (post.project?.id) {
+      ensureProjectScope(request, post.project.id);
+    }
+
+    if (post.visibility === 'hidden' && !hasPermission(request, 'activities:moderate') && post.author.id !== request.user.sub) {
+      throw new AppError('Post não disponível', 404);
+    }
+
+    const reaction = await deleteFeedReaction(params.data.id, params.data.reactionId, {
+      requestorId: request.user.sub,
+      canModerate: hasPermission(request, 'activities:moderate'),
+    });
+
+    return { reaction };
   });
 
   app.post('/feed/posts/:id/comments', {

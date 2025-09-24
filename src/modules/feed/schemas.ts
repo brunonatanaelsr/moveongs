@@ -45,3 +45,12 @@ export const commentIdParamSchema = z.object({
 export const createCommentBodySchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
+
+export const createReactionBodySchema = z.object({
+  type: z.string().trim().min(1).max(32),
+});
+
+export const postReactionParamsSchema = z.object({
+  id: z.string().uuid(),
+  reactionId: z.string().uuid(),
+});
