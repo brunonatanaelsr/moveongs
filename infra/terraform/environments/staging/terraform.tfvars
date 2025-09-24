@@ -1,0 +1,27 @@
+project              = "moveongs"
+environment          = "staging"
+aws_region           = "us-east-1"
+availability_zones   = ["us-east-1a", "us-east-1b"]
+vpc_cidr             = "10.31.0.0/16"
+public_subnet_cidrs  = ["10.31.10.0/24", "10.31.11.0/24"]
+private_subnet_cidrs = ["10.31.20.0/24", "10.31.21.0/24"]
+container_image      = "ghcr.io/your-org/moveongs:staging"
+desired_count        = 2
+max_count            = 4
+cpu                  = 512
+memory               = 1024
+create_rds           = true
+rds_instance_class   = "db.t4g.medium"
+rds_allocated_storage = 40
+rds_multi_az         = false
+rds_password         = "change-me-staging"
+create_redis         = true
+redis_node_type      = "cache.t3.small"
+redis_num_cache_nodes = 2
+jwt_secret_value     = "staging-secret-change-me"
+allowed_ingress_cidrs = ["0.0.0.0/0"]
+extra_environment = {
+  OTEL_ENABLED                = "true"
+  OTEL_SERVICE_NAME           = "moveongs-api-staging"
+  OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.staging.your-domain.com"
+}

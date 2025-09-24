@@ -31,6 +31,48 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
    npm run dev
    ```
 
+### Observabilidade e operação
+
+* Logs, métricas, tracing, SLOs e runbooks documentados em [`docs/observabilidade`](docs/observabilidade/README.md).
+* Variáveis essenciais já presentes em `.env.example` (`OTEL_*`, `LOG_LEVEL`, `OTEL_ENABLED`).
+* Requisições HTTP devolvem o header `x-request-id` e todos os logs carregam `correlation_id`, `trace_id` e `span_id`.
+
+## Ambientes via Docker Compose
+
+Arquivos de orquestração completos estão na pasta [`deploy/`](deploy/):
+
+| Arquivo                      | Uso principal                                                     |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `docker-compose.dev.yml`     | Desenvolvimento local com hot reload + Postgres, Redis e stack de observabilidade completa.
+| `docker-compose.staging.yml` | Ambiente staging self-hosted (usa imagem publicada + observabilidade).
+| `docker-compose.prod.yml`    | Produção com API, OpenTelemetry Collector e Caddy como reverse proxy.
+
+Exemplos:
+
+```bash
+# Dev (hot reload)
+docker compose -f deploy/docker-compose.dev.yml up --build
+
+# Staging (imagem publicada)
+IMAGE=ghcr.io/your-org/moveongs:staging docker compose -f deploy/docker-compose.staging.yml up -d
+
+# Produção (usa envs para DB/Redis/TLS)
+TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
+  docker compose -f deploy/docker-compose.prod.yml up -d
+```
+
+## CI/CD
+
+* [`ci.yml`](.github/workflows/ci.yml) executa `npm ci`, `npm run check`, `npm test` e `npm run build`, além de validar o Dockerfile.
+* [`deploy.yml`](.github/workflows/deploy.yml) builda e publica a imagem no GHCR e faz deploy via SSH + Docker Compose para staging e produção.
+* Configure os segredos (`STAGING_SSH_HOST`, `STAGING_SSH_USER`, `PROD_SSH_HOST`, etc.) e variáveis (`STAGING_PUBLIC_URL`, `PRODUCTION_PUBLIC_URL`) no GitHub.
+
+## Infraestrutura como código
+
+* Terraform modular em [`infra/terraform`](infra/terraform) provisiona VPC, ECS Fargate, RDS, ElastiCache, ALB e Route53.
+* Utilize os `terraform.tfvars` por ambiente (`environments/dev|staging|prod`) e ajuste `container_image`, secrets e dimensões conforme necessário.
+* Secrets sensíveis (JWT, DATABASE_URL, REDIS_URL) são armazenados no AWS Secrets Manager e injetados automaticamente na task definition.
+
 ## Scripts disponíveis
 
 - `npm run dev` – Fastify com recarga (`tsx`).
@@ -84,7 +126,6 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 
 - Conectar o frontend `/dashboard` aos ambientes reais (configurar `NEXT_PUBLIC_API_URL`).
 - Expandir endpoints para feed/mensagens, planos de ação completos e notificações.
-- Adicionar observabilidade (logs estruturados/métricas) e pipeline CI/CD.
 - Consultar o [Backlog CODEx — Cobertura da Especificação IMM](docs/backlog-codex.md) para planejamento detalhado de epics e stories.
 
 ## Licença

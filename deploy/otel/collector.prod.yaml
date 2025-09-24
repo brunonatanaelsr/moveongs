@@ -1,0 +1,48 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  otlphttp/traces:
+    endpoint: ${env:OTLP_TRACES_ENDPOINT}
+    headers:
+      Authorization: ${env:OTLP_AUTH_HEADER}
+  otlphttp/metrics:
+    endpoint: ${env:OTLP_METRICS_ENDPOINT}
+    headers:
+      Authorization: ${env:OTLP_AUTH_HEADER}
+  logging:
+    loglevel: error
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+extensions:
+  health_check:
+  pprof:
+
+service:
+  extensions: [pprof, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [logging]
