@@ -1,6 +1,10 @@
-export type EnrollmentCreatedEvent = {
-  type: 'enrollment.created';
+type NotificationEventBase = {
+  id?: string;
   triggeredAt?: string;
+};
+
+export type EnrollmentCreatedEvent = NotificationEventBase & {
+  type: 'enrollment.created';
   data: {
     enrollmentId: string;
     beneficiaryId: string;
@@ -12,11 +16,11 @@ export type EnrollmentCreatedEvent = {
     status: string;
     enrolledAt: string;
   };
+  };
 };
 
-export type AttendanceRecordedEvent = {
+export type AttendanceRecordedEvent = NotificationEventBase & {
   type: 'attendance.recorded';
-  triggeredAt?: string;
   data: {
     attendanceId: string;
     enrollmentId: string;
@@ -24,11 +28,11 @@ export type AttendanceRecordedEvent = {
     present: boolean;
     justification: string | null;
   };
+  };
 };
 
-export type AttendanceLowAttendanceEvent = {
+export type AttendanceLowAttendanceEvent = NotificationEventBase & {
   type: 'attendance.low_attendance';
-  triggeredAt?: string;
   data: {
     enrollmentId: string;
     beneficiaryId: string;
@@ -42,11 +46,11 @@ export type AttendanceLowAttendanceEvent = {
     totalSessions: number;
     presentSessions: number;
   };
+  };
 };
 
-export type ConsentRecordedEvent = {
+export type ConsentRecordedEvent = NotificationEventBase & {
   type: 'consent.recorded';
-  triggeredAt?: string;
   data: {
     consentId: string;
     beneficiaryId: string;
@@ -56,11 +60,11 @@ export type ConsentRecordedEvent = {
     grantedAt: string;
     revokedAt: string | null;
   };
+  };
 };
 
-export type ConsentUpdatedEvent = {
+export type ConsentUpdatedEvent = NotificationEventBase & {
   type: 'consent.updated';
-  triggeredAt?: string;
   data: {
     consentId: string;
     beneficiaryId: string;
@@ -70,11 +74,11 @@ export type ConsentUpdatedEvent = {
     grantedAt: string;
     revokedAt: string | null;
   };
+  };
 };
 
-export type ActionItemDueSoonEvent = {
+export type ActionItemDueSoonEvent = NotificationEventBase & {
   type: 'action_item.due_soon';
-  triggeredAt?: string;
   data: {
     actionPlanId: string;
     actionItemId: string;
@@ -86,11 +90,11 @@ export type ActionItemDueSoonEvent = {
     status: string;
     dueInDays: number;
   };
+  };
 };
 
-export type ActionItemOverdueEvent = {
+export type ActionItemOverdueEvent = NotificationEventBase & {
   type: 'action_item.overdue';
-  triggeredAt?: string;
   data: {
     actionPlanId: string;
     actionItemId: string;
@@ -102,11 +106,11 @@ export type ActionItemOverdueEvent = {
     status: string;
     overdueByDays: number;
   };
+  };
 };
 
-export type PasswordResetRequestedEvent = {
+export type PasswordResetRequestedEvent = NotificationEventBase & {
   type: 'auth.password_reset_requested';
-  triggeredAt?: string;
   data: {
     email: string;
     name: string;
