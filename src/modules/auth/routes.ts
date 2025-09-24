@@ -1,6 +1,6 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { AppError } from '../../shared/errors';
-import { getUserById } from '../users/repository';
+import { getUserById, type PermissionGrant, type RoleAssignment } from '../users/repository';
 import { loginBodySchema, passwordForgotBodySchema, passwordResetBodySchema } from './schemas';
 import {
   issueSessionRefreshToken,
@@ -10,6 +10,53 @@ import {
   validateCredentials,
   revokeRefreshTokenValue,
 } from './service';
+import {
+  createLoginChallengeForUser,
+  verifyTotpLoginChallenge,
+  verifyWebAuthnLoginChallenge,
+} from '../mfa/service';
+import { verifyMfaChallengeSchema } from '../mfa/schemas';
+
+type AuthPayloadUser = {
+  id: string;
+  name: string;
+  email: string;
+  roles: RoleAssignment[];
+  permissions: PermissionGrant[];
+};
+
+function buildAuthResponse(
+  app: FastifyInstance,
+  user: AuthPayloadUser,
+  refreshToken: string,
+  refreshExpiresAt: Date,
+) {
+  const roles = user.roles.map((role) => role.slug);
+  const projectScopes = Array.from(new Set(user.roles.map((role) => role.projectId).filter(Boolean))) as string[];
+  const permissionKeys = user.permissions.map((permission) => permission.key);
+
+  const accessToken = app.jwt.sign({
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    roles,
+    projectScopes,
+    permissions: permissionKeys,
+  });
+
+  return {
+    token: accessToken,
+    refreshToken,
+    refreshTokenExpiresAt: refreshExpiresAt.toISOString(),
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roles: user.roles,
+      permissions: user.permissions,
+    },
+  };
+}
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/auth/login', async (request, reply) => {
@@ -21,33 +68,19 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const user = await validateCredentials(parsed.data.email, parsed.data.password);
 
-    const roles = user.roles.map((role) => role.slug);
-    const projectScopes = Array.from(new Set(user.roles.map((role) => role.projectId).filter(Boolean))) as string[];
-    const permissionKeys = user.permissions.map((permission) => permission.key);
-
-    const accessToken = app.jwt.sign({
-      sub: user.id,
-      email: user.email,
-      name: user.name,
-      roles,
-      projectScopes,
-      permissions: permissionKeys,
-    });
+    const challenge = await createLoginChallengeForUser(user.id);
+    if (challenge) {
+      return reply.code(202).send({
+        mfaRequired: true,
+        challengeId: challenge.id,
+        methods: challenge.methods,
+        expiresAt: challenge.expiresAt.toISOString(),
+        ...(challenge.webauthnOptions ? { webauthnOptions: challenge.webauthnOptions } : {}),
+      });
+    }
 
     const refreshToken = await issueSessionRefreshToken(user.id);
-
-    return reply.send({
-      token: accessToken,
-      refreshToken: refreshToken.token,
-      refreshTokenExpiresAt: refreshToken.expiresAt.toISOString(),
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        roles: user.roles,
-        permissions: user.permissions,
-      },
-    });
+    return reply.send(buildAuthResponse(app, user, refreshToken.token, refreshToken.expiresAt));
   });
 
   app.get('/auth/me', {
@@ -88,31 +121,30 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('User not found', 404);
     }
 
-    const roles = user.roles.map((role) => role.slug);
-    const projectScopes = Array.from(new Set(user.roles.map((role) => role.projectId).filter(Boolean))) as string[];
-    const permissionKeys = user.permissions.map((permission) => permission.key);
+    return reply.send(buildAuthResponse(app, user, newToken, expiresAt));
+  });
 
-    const accessToken = app.jwt.sign({
-      sub: user.id,
-      email: user.email,
-      name: user.name,
-      roles,
-      projectScopes,
-      permissions: permissionKeys,
-    });
+  app.post('/auth/mfa/verify', async (request, reply) => {
+    const parsed = verifyMfaChallengeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError('Invalid request', 400, parsed.error.flatten());
+    }
 
-    return reply.send({
-      token: accessToken,
-      refreshToken: newToken,
-      refreshTokenExpiresAt: expiresAt.toISOString(),
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        roles: user.roles,
-        permissions: user.permissions,
-      },
-    });
+    const payload = parsed.data;
+    let result: { userId: string };
+    if (payload.method === 'totp') {
+      result = await verifyTotpLoginChallenge({ challengeId: payload.challengeId, code: payload.code! });
+    } else {
+      result = await verifyWebAuthnLoginChallenge({ challengeId: payload.challengeId, response: payload.response });
+    }
+
+    const user = await getUserById(result.userId);
+    if (!user || !user.isActive) {
+      throw new AppError('User not found or inactive', 403);
+    }
+
+    const refreshToken = await issueSessionRefreshToken(user.id);
+    return reply.send(buildAuthResponse(app, user, refreshToken.token, refreshToken.expiresAt));
   });
 
   app.post('/auth/password/forgot', async (request, reply) => {

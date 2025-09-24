@@ -46,6 +46,7 @@ async function loadSchema() {
     path.join(__dirname, '../../artifacts/sql/0001_initial.sql'),
     path.join(__dirname, '../../artifacts/sql/0002_rbac_and_profiles.sql'),
     path.join(__dirname, '../../artifacts/sql/0004_certificates.sql'),
+    path.join(__dirname, '../../artifacts/sql/0006_mfa_consent_reviews_dsr.sql'),
   ];
 
   for (const sqlPath of files) {

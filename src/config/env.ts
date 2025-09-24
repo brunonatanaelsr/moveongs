@@ -55,6 +55,13 @@ const envSchema = z.object({
   RATE_LIMIT_TIME_WINDOW_MS: z.string().regex(/^[0-9]+$/).default('60000'),
   TOKEN_ROTATION_TTL_MINUTES: z.string().regex(/^[0-9]+$/).default('1440'),
   TOKEN_ROTATION_REUSE_WINDOW_MINUTES: z.string().regex(/^[0-9]+$/).default('5'),
+  MFA_TOTP_ISSUER: z.string().default('MOVEONGS'),
+  MFA_LOGIN_CHALLENGE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
+  WEBAUTHN_RP_ID: z.string().default('imm.local'),
+  WEBAUTHN_RP_NAME: z.string().default('MOVE ONG Backend'),
+  WEBAUTHN_RP_ORIGIN: z.string().url().default('https://imm.local'),
+  CONSENT_REVIEW_INTERVAL_DAYS: z.string().regex(/^[0-9]+$/).default('365'),
+  CONSENT_REVIEW_NOTIFICATION_COOLDOWN_DAYS: z.string().regex(/^[0-9]+$/).default('30'),
 });
 
 type Env = z.infer<typeof envSchema>;
