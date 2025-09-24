@@ -1,15 +1,41 @@
+import { randomUUID } from 'node:crypto';
 import { getEnv } from '../../config/env';
 import { logger } from '../../config/logger';
 import { JobQueue } from '../../shared/job-queue';
-import type { WebhookSubscription } from './webhook-registry';
+import type { NotificationChannel, NotificationEvent } from './types';
 import { getWebhooksForEvent } from './webhook-registry';
-import type { NotificationEvent } from './types';
+import type { WebhookSubscription } from './webhook-registry';
+import { EmailNotificationAdapter, type EmailNotificationPayload } from './adapters/email-adapter';
+import { WhatsAppNotificationAdapter, type WhatsAppNotificationPayload } from './adapters/whatsapp-adapter';
+import { WebhookNotificationAdapter, type WebhookJobPayload } from './adapters/webhook-adapter';
+import { NotificationMetrics, type NotificationMetricsSnapshot } from './metrics';
 
-type EmailNotificationPayload = {
-  recipients: string[];
-  subject: string;
-  body: string;
-  eventType: NotificationEvent['type'];
+export type NotificationQueueJob =
+  | {
+    channel: 'email';
+    dedupeKey: string;
+    eventId: string;
+    payload: EmailNotificationPayload;
+  }
+  | {
+    channel: 'whatsapp';
+    dedupeKey: string;
+    eventId: string;
+    payload: WhatsAppNotificationPayload;
+  }
+  | {
+    channel: 'webhook';
+    dedupeKey: string;
+    eventId: string;
+    payload: WebhookJobPayload;
+  };
+
+export type NotificationDeadLetter = {
+  id: string;
+  job: NotificationQueueJob;
+  error: string;
+  failedAt: string;
+  attempts: number;
 };
 
 type EmailMessage = {
@@ -18,28 +44,19 @@ type EmailMessage = {
   recipients?: string[];
 };
 
-type WhatsAppNotificationPayload = {
-  numbers: string[];
-  message: string;
-  eventType: NotificationEvent['type'];
+type NotificationEventNormalized = NotificationEvent & { triggeredAt: string; id: string };
+
+type QueueOptions = {
+  concurrency: number;
+  maxAttempts: number;
+  backoffMs: number;
 };
-
-type NotificationEventWithTimestamp = NotificationEvent & { triggeredAt: string };
-
-type WebhookJobPayload = {
-  subscription: WebhookSubscription;
-  event: NotificationEventWithTimestamp;
-};
-
-type NotificationJob =
-  | { type: 'email'; payload: EmailNotificationPayload }
-  | { type: 'whatsapp'; payload: WhatsAppNotificationPayload }
-  | { type: 'webhook'; payload: WebhookJobPayload };
-
-const emailDispatchHistory: EmailNotificationPayload[] = [];
-const whatsappDispatchHistory: WhatsAppNotificationPayload[] = [];
 
 const env = getEnv();
+const metrics = new NotificationMetrics();
+const emailAdapter = new EmailNotificationAdapter(metrics, env.NOTIFICATIONS_EMAIL_FROM);
+const whatsappAdapter = new WhatsAppNotificationAdapter(metrics);
+const webhookAdapter = new WebhookNotificationAdapter(metrics);
 
 const emailRecipients = (env.NOTIFICATIONS_EMAIL_RECIPIENTS ?? '')
   .split(',')
@@ -53,33 +70,75 @@ const whatsappNumbers = (env.NOTIFICATIONS_WHATSAPP_NUMBERS ?? '')
 
 const webhookTimeoutMs = Number.parseInt(env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS, 10) || 5000;
 
-const notificationQueue = new JobQueue<NotificationJob>(async (job) => {
-  switch (job.type) {
+const processedJobKeys = new Set<string>();
+const deadLetterQueue: NotificationDeadLetter[] = [];
+
+const queueOptions: QueueOptions = env.NODE_ENV === 'test'
+  ? { concurrency: 1, maxAttempts: 2, backoffMs: 25 }
+  : { concurrency: 3, maxAttempts: 5, backoffMs: 1500 };
+
+const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
+  if (processedJobKeys.has(job.dedupeKey)) {
+    metrics.recordDuplicate(job.channel);
+    return;
+  }
+
+  switch (job.channel) {
     case 'email':
-      await dispatchEmail(job.payload);
+      await emailAdapter.send(job.payload);
       break;
     case 'whatsapp':
-      await dispatchWhatsApp(job.payload);
+      await whatsappAdapter.send(job.payload);
       break;
     case 'webhook':
-      await dispatchWebhook(job.payload);
+      await webhookAdapter.send(job.payload);
       break;
     default:
-      // Exhaustive check
-      throw new Error(`Unsupported notification job type ${(job as NotificationJob).type}`);
+      throw new Error(`Unsupported notification job channel ${(job as NotificationQueueJob).channel}`);
   }
+
+  processedJobKeys.add(job.dedupeKey);
 }, {
-  concurrency: 3,
-  maxAttempts: 5,
-  backoffMs: 1500,
+  concurrency: queueOptions.concurrency,
+  maxAttempts: queueOptions.maxAttempts,
+  backoffMs: queueOptions.backoffMs,
+  onAttemptFailure: (error, job) => {
+    const notificationJob = job.payload;
+    if (notificationJob) {
+      const hasRetry = job.attempts < queueOptions.maxAttempts;
+      if (hasRetry) {
+        metrics.recordRetry(notificationJob.channel);
+      }
+    }
+    logger.warn({
+      error,
+      job: job.payload,
+      attempts: job.attempts,
+    }, 'Notification job attempt failed');
+  },
   onError: (error, job) => {
+    const notificationJob = job.payload;
+    if (notificationJob) {
+      const entry: NotificationDeadLetter = {
+        id: randomUUID(),
+        job: notificationJob,
+        error: error instanceof Error ? error.message : String(error),
+        failedAt: new Date().toISOString(),
+        attempts: job.attempts,
+      };
+
+      deadLetterQueue.push(entry);
+      metrics.recordDeadLetter(notificationJob.channel);
+    }
+
     logger.error({ error, jobPayload: job.payload }, 'Notification job failed after retries');
   },
 });
 
 export function publishNotificationEvent(event: NotificationEvent) {
-  const normalizedEvent: NotificationEventWithTimestamp = {
+  const normalizedEvent: NotificationEventNormalized = {
     ...event,
+    id: event.id ?? randomUUID(),
     triggeredAt: event.triggeredAt ?? new Date().toISOString(),
   };
 
@@ -87,25 +146,33 @@ export function publishNotificationEvent(event: NotificationEvent) {
   const recipients = emailMessage?.recipients ?? emailRecipients;
 
   if (emailMessage && recipients.length > 0) {
+    const recipientsKey = buildTargetKey(recipients);
     notificationQueue.enqueue({
-      type: 'email',
+      channel: 'email',
+      dedupeKey: buildJobKey('email', normalizedEvent.id, recipientsKey),
+      eventId: normalizedEvent.id,
       payload: {
         recipients,
         subject: emailMessage.subject,
         body: emailMessage.body,
         eventType: normalizedEvent.type,
+        eventId: normalizedEvent.id,
       },
     });
   }
 
   const whatsappMessage = buildWhatsAppMessage(normalizedEvent);
   if (whatsappMessage && whatsappNumbers.length > 0) {
+    const numbersKey = buildTargetKey(whatsappNumbers);
     notificationQueue.enqueue({
-      type: 'whatsapp',
+      channel: 'whatsapp',
+      dedupeKey: buildJobKey('whatsapp', normalizedEvent.id, numbersKey),
+      eventId: normalizedEvent.id,
       payload: {
         numbers: whatsappNumbers,
         message: whatsappMessage,
         eventType: normalizedEvent.type,
+        eventId: normalizedEvent.id,
       },
     });
   }
@@ -113,85 +180,82 @@ export function publishNotificationEvent(event: NotificationEvent) {
   const webhooks = getWebhooksForEvent(normalizedEvent.type);
   for (const subscription of webhooks) {
     notificationQueue.enqueue({
-      type: 'webhook',
-      payload: {
-        subscription,
-        event: normalizedEvent,
-      },
+      channel: 'webhook',
+      dedupeKey: buildJobKey('webhook', normalizedEvent.id, subscription.id),
+      eventId: normalizedEvent.id,
+      payload: buildWebhookPayload(subscription, normalizedEvent),
     });
   }
 }
 
-async function dispatchEmail(payload: EmailNotificationPayload) {
-  emailDispatchHistory.push(payload);
-  logger.info({
-    to: payload.recipients,
-    subject: payload.subject,
-    event: payload.eventType,
-  }, 'Email notification dispatched');
+export async function waitForNotificationQueue() {
+  await notificationQueue.onIdle();
 }
 
-async function dispatchWhatsApp(payload: WhatsAppNotificationPayload) {
-  whatsappDispatchHistory.push(payload);
-  logger.info({
-    to: payload.numbers,
-    event: payload.eventType,
-  }, 'WhatsApp notification dispatched');
+export function getEmailDispatchHistory() {
+  return emailAdapter.getHistory();
 }
 
-async function dispatchWebhook(payload: WebhookJobPayload) {
-  const fetchFn: ((input: string, init?: any) => Promise<any>) | undefined = (globalThis as any).fetch;
-  if (!fetchFn) {
-    throw new Error('Fetch API not available for webhook dispatch');
+export function getWhatsappDispatchHistory() {
+  return whatsappAdapter.getHistory();
+}
+
+export function resetNotificationDispatchHistory() {
+  emailAdapter.reset();
+  whatsappAdapter.reset();
+  webhookAdapter.reset();
+  processedJobKeys.clear();
+  deadLetterQueue.length = 0;
+  metrics.reset();
+}
+
+export function getNotificationMetricsSnapshot(): NotificationMetricsSnapshot {
+  return metrics.getSnapshot();
+}
+
+export function getNotificationDeadLetters(): ReadonlyArray<NotificationDeadLetter> {
+  return deadLetterQueue;
+}
+
+export function retryNotificationDeadLetter(id: string): boolean {
+  const index = deadLetterQueue.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    return false;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), webhookTimeoutMs);
-
-  try {
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      'x-imm-event': payload.event.type,
-      'x-imm-webhook-id': payload.subscription.id,
-    };
-
-    if (payload.subscription.secret) {
-      headers['x-imm-webhook-secret'] = payload.subscription.secret;
-    } else if (env.NOTIFICATIONS_WEBHOOK_SECRET) {
-      headers['x-imm-webhook-secret'] = env.NOTIFICATIONS_WEBHOOK_SECRET;
-    }
-
-    const response = await fetchFn(payload.subscription.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        event: payload.event.type,
-        triggeredAt: payload.event.triggeredAt,
-        data: payload.event.data,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response || typeof response.ok !== 'boolean') {
-      throw new Error('Webhook dispatch returned an invalid response');
-    }
-
-    if (!response.ok) {
-      const status = typeof response.status === 'number' ? response.status : 'unknown';
-      throw new Error(`Webhook dispatch failed with status ${status}`);
-    }
-
-    logger.info({
-      event: payload.event.type,
-      webhookId: payload.subscription.id,
-      url: payload.subscription.url,
-    }, 'Webhook notification dispatched');
-  } finally {
-    clearTimeout(timeout);
-  }
+  const [entry] = deadLetterQueue.splice(index, 1);
+  metrics.recordRetry(entry.job.channel);
+  notificationQueue.enqueue(entry.job);
+  return true;
 }
 
-function buildEmailMessage(event: NotificationEventWithTimestamp): EmailMessage | null {
+export const __testing = {
+  emailAdapter,
+  whatsappAdapter,
+  webhookAdapter,
+  metrics,
+  processedJobKeys,
+  deadLetterQueue,
+};
+
+function buildJobKey(channel: NotificationChannel, eventId: string, target: string): string {
+  return `${channel}:${eventId}:${target}`;
+}
+
+function buildTargetKey(values: string[]): string {
+  return [...values].sort().join(',');
+}
+
+function buildWebhookPayload(subscription: WebhookSubscription, event: NotificationEventNormalized): WebhookJobPayload {
+  return {
+    subscription,
+    event,
+    timeoutMs: webhookTimeoutMs,
+    defaultSecret: env.NOTIFICATIONS_WEBHOOK_SECRET ?? null,
+  };
+}
+
+function buildEmailMessage(event: NotificationEventNormalized): EmailMessage | null {
   switch (event.type) {
     case 'enrollment.created':
       return {
@@ -304,7 +368,7 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): EmailMessage 
   }
 }
 
-function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | null {
+function buildWhatsAppMessage(event: NotificationEventNormalized): string | null {
   switch (event.type) {
     case 'enrollment.created':
       return `Nova matrícula: ${event.data.beneficiaryName} no projeto ${event.data.projectName}`;
@@ -339,21 +403,3 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
       return null;
   }
 }
-
-export async function waitForNotificationQueue() {
-  await notificationQueue.onIdle();
-}
-
-export function getEmailDispatchHistory(): ReadonlyArray<EmailNotificationPayload> {
-  return emailDispatchHistory;
-}
-
-export function getWhatsappDispatchHistory(): ReadonlyArray<WhatsAppNotificationPayload> {
-  return whatsappDispatchHistory;
-}
-
-export function resetNotificationDispatchHistory() {
-  emailDispatchHistory.length = 0;
-  whatsappDispatchHistory.length = 0;
-}
-
