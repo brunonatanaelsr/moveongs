@@ -30,7 +30,14 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid query', 400, parsedQuery.error.flatten());
     }
 
-    const data = await listBeneficiarySummaries(parsedQuery.data);
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
+    const data = await listBeneficiarySummaries({
+      ...parsedQuery.data,
+      allowedProjectIds,
+    });
 
     return {
       data,
@@ -74,7 +81,11 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid params', 400, parsedParams.error.flatten());
     }
 
-    const record = await getBeneficiary(parsedParams.data.id);
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
+    const record = await getBeneficiary(parsedParams.data.id, allowedProjectIds);
     return { beneficiary: record };
   });
 
@@ -93,8 +104,12 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
-    const before = await getBeneficiary(parsedParams.data.id);
-    const record = await updateBeneficiary(parsedParams.data.id, parsedBody.data);
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
+    const before = await getBeneficiary(parsedParams.data.id, allowedProjectIds);
+    const record = await updateBeneficiary(parsedParams.data.id, parsedBody.data, allowedProjectIds);
 
     await recordAuditLog({
       userId: request.user?.sub ?? null,

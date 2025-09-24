@@ -12,12 +12,17 @@ export async function createBeneficiary(input: CreateBeneficiaryParams) {
   return createBeneficiaryRepository(input);
 }
 
-export async function updateBeneficiary(id: string, input: UpdateBeneficiaryParams) {
+export async function updateBeneficiary(
+  id: string,
+  input: UpdateBeneficiaryParams,
+  allowedProjectIds?: string[] | null,
+) {
+  await getBeneficiaryById(id, allowedProjectIds ?? null);
   return updateBeneficiaryRepository(id, input);
 }
 
-export async function getBeneficiary(id: string) {
-  const record = await getBeneficiaryById(id);
+export async function getBeneficiary(id: string, allowedProjectIds?: string[] | null) {
+  const record = await getBeneficiaryById(id, allowedProjectIds ?? null);
 
   if (!record) {
     throw new NotFoundError('Beneficiary not found');
@@ -26,7 +31,12 @@ export async function getBeneficiary(id: string) {
   return record;
 }
 
-export async function listBeneficiarySummaries(params: { search?: string; limit?: number; offset?: number }) {
+export async function listBeneficiarySummaries(params: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+  allowedProjectIds?: string[] | null;
+}) {
   const limit = Math.min(params.limit ?? 25, 100);
   const offset = params.offset ?? 0;
 
@@ -38,5 +48,7 @@ export async function listBeneficiarySummaries(params: { search?: string; limit?
     throw new AppError('offset cannot be negative', 400);
   }
 
-  return listBeneficiaries({ search: params.search, limit, offset });
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+
+  return listBeneficiaries({ search: params.search, limit, offset, allowedProjectIds: scopes });
 }

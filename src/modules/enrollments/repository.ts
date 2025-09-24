@@ -1,5 +1,23 @@
 import { query, withTransaction } from '../../db';
-import { AppError, NotFoundError } from '../../shared/errors';
+import { AppError, ForbiddenError, NotFoundError } from '../../shared/errors';
+
+function appendScopeCondition(
+  conditions: string[],
+  values: unknown[],
+  column: string,
+  scopes?: string[] | null,
+) {
+  if (!scopes || scopes.length === 0) {
+    return;
+  }
+
+  const placeholders = scopes.map((scope) => {
+    values.push(scope);
+    return `$${values.length}`;
+  });
+
+  conditions.push(`${column} in (${placeholders.join(', ')})`);
+}
 
 function parseJson(value: any) {
   if (value === null || value === undefined) {
@@ -54,12 +72,19 @@ async function assertBeneficiaryExists(id: string) {
   }
 }
 
-async function getCohort(id: string) {
+async function getCohort(id: string, allowedProjectIds?: string[] | null) {
   const result = await query('select id, project_id from cohorts where id = $1', [id]);
   if (result.rowCount === 0) {
     throw new NotFoundError('Cohort not found');
   }
-  return result.rows[0];
+
+  const row = result.rows[0];
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  if (scopes && !scopes.includes(row.project_id)) {
+    throw new ForbiddenError('Cohort belongs to a restricted project');
+  }
+
+  return row;
 }
 
 function mapEnrollmentRow(row: any): EnrollmentRecord {
@@ -96,10 +121,11 @@ export async function createEnrollment(params: {
   enrolledAt?: string;
   status?: string;
   agreementAcceptance?: Record<string, unknown> | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord> {
   return withTransaction(async (client) => {
     await assertBeneficiaryExists(params.beneficiaryId);
-    await getCohort(params.cohortId);
+    await getCohort(params.cohortId, params.allowedProjectIds ?? null);
 
     const existing = await client.query(
       `select 1 from enrollments
@@ -126,7 +152,7 @@ export async function createEnrollment(params: {
     );
 
     const enrollmentId = rows[0].id;
-    const enrollment = await getEnrollmentById(enrollmentId);
+    const enrollment = await getEnrollmentById(enrollmentId, params.allowedProjectIds ?? null);
     if (!enrollment) {
       throw new AppError('Failed to load enrollment after creation', 500);
     }
@@ -139,9 +165,10 @@ export async function updateEnrollment(id: string, params: {
   status?: string;
   terminatedAt?: string;
   terminationReason?: string | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord> {
-  const current = await query('select * from enrollments where id = $1', [id]);
-  if (current.rowCount === 0) {
+  const current = await getEnrollmentById(id, params.allowedProjectIds ?? null);
+  if (!current) {
     throw new NotFoundError('Enrollment not found');
   }
 
@@ -174,7 +201,7 @@ export async function updateEnrollment(id: string, params: {
     [id, params.status ?? null, params.terminatedAt ?? null, normalizedTerminationReason],
   );
 
-  const enrollment = await getEnrollmentById(id);
+  const enrollment = await getEnrollmentById(id, params.allowedProjectIds ?? null);
   if (!enrollment) {
     throw new AppError('Failed to load enrollment after update', 500);
   }
@@ -182,7 +209,18 @@ export async function updateEnrollment(id: string, params: {
   return enrollment;
 }
 
-export async function getEnrollmentById(id: string): Promise<EnrollmentRecord | null> {
+export async function getEnrollmentById(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<EnrollmentRecord | null> {
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  const values: unknown[] = [id];
+  const conditions = [`e.id = $1`];
+
+  appendScopeCondition(conditions, values, 'c.project_id', scopes);
+
+  const whereClause = `where ${conditions.join(' and ')}`;
+
   const { rows } = await query(
     `select e.id,
             e.beneficiary_id,
@@ -205,12 +243,12 @@ export async function getEnrollmentById(id: string): Promise<EnrollmentRecord | 
        join cohorts c on c.id = e.cohort_id
        join projects p on p.id = c.project_id
        left join attendance a on a.enrollment_id = e.id
-      where e.id = $1
+      ${whereClause}
       group by e.id, e.beneficiary_id, e.cohort_id, e.status, e.enrolled_at,
                e.terminated_at, e.termination_reason, e.agreement_acceptance,
                e.created_at, e.updated_at,
                b.full_name, c.code, c.project_id, p.name`,
-    [id],
+    values,
   );
 
   if (rows.length === 0) {
@@ -228,7 +266,43 @@ export async function listEnrollments(params: {
   activeOnly?: boolean;
   limit: number;
   offset: number;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord[]> {
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.beneficiaryId) {
+    values.push(params.beneficiaryId);
+    conditions.push(`e.beneficiary_id = $${values.length}`);
+  }
+
+  if (params.cohortId) {
+    values.push(params.cohortId);
+    conditions.push(`e.cohort_id = $${values.length}`);
+  }
+
+  if (params.projectId) {
+    values.push(params.projectId);
+    conditions.push(`c.project_id = $${values.length}`);
+  }
+
+  if (params.status) {
+    values.push(params.status);
+    conditions.push(`e.status = $${values.length}`);
+  }
+
+  if (params.activeOnly) {
+    conditions.push(`e.status = 'active'`);
+  }
+
+  appendScopeCondition(conditions, values, 'c.project_id', scopes);
+
+  const whereClause = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
+
+  const limitIndex = values.push(params.limit);
+  const offsetIndex = values.push(params.offset);
+
   const { rows } = await query(
     `select e.id,
             e.beneficiary_id,
@@ -251,26 +325,14 @@ export async function listEnrollments(params: {
        join cohorts c on c.id = e.cohort_id
        join projects p on p.id = c.project_id
        left join attendance a on a.enrollment_id = e.id
-      where ($1::uuid is null or e.beneficiary_id = $1)
-        and ($2::uuid is null or e.cohort_id = $2)
-        and ($3::uuid is null or c.project_id = $3)
-        and ($4::text is null or e.status = $4)
-        and (($5::boolean is false) or e.status = 'active')
+      ${whereClause}
       group by e.id, e.beneficiary_id, e.cohort_id, e.status, e.enrolled_at,
                e.terminated_at, e.termination_reason, e.agreement_acceptance,
                e.created_at, e.updated_at,
                b.full_name, c.code, c.project_id, p.name
       order by e.enrolled_at desc
-      limit $6 offset $7`,
-    [
-      params.beneficiaryId ?? null,
-      params.cohortId ?? null,
-      params.projectId ?? null,
-      params.status ?? null,
-      params.activeOnly ?? false,
-      params.limit,
-      params.offset,
-    ],
+      limit $${limitIndex} offset $${offsetIndex}`,
+    values,
   );
 
   return rows.map(mapEnrollmentRow);
@@ -282,8 +344,9 @@ export async function upsertAttendance(params: {
   present: boolean;
   justification?: string | null;
   recordedBy?: string | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<AttendanceRecord> {
-  await getEnrollmentByIdOrFail(params.enrollmentId);
+  await getEnrollmentByIdOrFail(params.enrollmentId, params.allowedProjectIds ?? null);
 
   const { rows } = await query(
     `insert into attendance (enrollment_id, date, present, justification, recorded_by)
@@ -318,9 +381,9 @@ function mapAttendanceRow(row: any): AttendanceRecord {
   };
 }
 
-async function getEnrollmentByIdOrFail(id: string) {
-  const result = await query('select id from enrollments where id = $1', [id]);
-  if (result.rowCount === 0) {
+async function getEnrollmentByIdOrFail(id: string, allowedProjectIds?: string[] | null) {
+  const enrollment = await getEnrollmentById(id, allowedProjectIds ?? null);
+  if (!enrollment) {
     throw new NotFoundError('Enrollment not found');
   }
 }
@@ -329,8 +392,9 @@ export async function listAttendance(params: {
   enrollmentId: string;
   startDate?: string;
   endDate?: string;
+  allowedProjectIds?: string[] | null;
 }): Promise<AttendanceRecord[]> {
-  await getEnrollmentByIdOrFail(params.enrollmentId);
+  await getEnrollmentByIdOrFail(params.enrollmentId, params.allowedProjectIds ?? null);
 
   const { rows } = await query(
     `select * from attendance

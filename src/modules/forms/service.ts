@@ -28,6 +28,7 @@ import {
   updateFormSubmission as updateFormSubmissionRepository,
   updateFormTemplate as updateFormTemplateRepository,
 } from './repository';
+import { getBeneficiaryById } from '../beneficiaries/repository';
 
 const execFileAsync = promisify(execFile);
 
@@ -52,10 +53,22 @@ export async function getFormTemplateOrFail(id: string): Promise<FormTemplateRec
 }
 
 export async function listSubmissions(filters: ListSubmissionsFilters): Promise<FormSubmissionSummary[]> {
-  return listSubmissionsByBeneficiary(filters);
+  const scopes = filters.allowedProjectIds && filters.allowedProjectIds.length > 0 ? filters.allowedProjectIds : null;
+  return listSubmissionsByBeneficiary({ ...filters, allowedProjectIds: scopes });
 }
 
-export async function createSubmission(input: CreateSubmissionInput): Promise<FormSubmissionRecord> {
+export async function createSubmission(
+  input: CreateSubmissionInput,
+  allowedProjectIds?: string[] | null,
+): Promise<FormSubmissionRecord> {
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  if (scopes) {
+    const beneficiary = await getBeneficiaryById(input.beneficiaryId, scopes);
+    if (!beneficiary) {
+      throw new NotFoundError('Beneficiary not found');
+    }
+  }
+
   const template = input.schemaVersion
     ? await getTemplateByTypeAndVersion(input.formType, input.schemaVersion)
     : await getLatestActiveTemplate(input.formType);
@@ -82,21 +95,31 @@ export async function createSubmission(input: CreateSubmissionInput): Promise<Fo
   return createFormSubmissionRepository(params);
 }
 
-export async function getSubmissionOrFail(id: string): Promise<FormSubmissionRecord> {
-  const submission = await getFormSubmissionById(id);
+export async function getSubmissionOrFail(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<FormSubmissionRecord> {
+  const submission = await getFormSubmissionById(id, allowedProjectIds);
   if (!submission) {
     throw new NotFoundError('Form submission not found');
   }
   return submission;
 }
 
-export async function updateSubmission(id: string, params: UpdateSubmissionParams): Promise<FormSubmissionRecord> {
-  await getSubmissionOrFail(id);
+export async function updateSubmission(
+  id: string,
+  params: UpdateSubmissionParams,
+  allowedProjectIds?: string[] | null,
+): Promise<FormSubmissionRecord> {
+  await getSubmissionOrFail(id, allowedProjectIds);
   return updateFormSubmissionRepository(id, params);
 }
 
-export async function generateSubmissionPdf(id: string): Promise<{ filename: string; buffer: Buffer }> {
-  const submission = await getSubmissionOrFail(id);
+export async function generateSubmissionPdf(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<{ filename: string; buffer: Buffer }> {
+  const submission = await getSubmissionOrFail(id, allowedProjectIds);
 
   let template = submission.template ?? null;
   if (!template) {

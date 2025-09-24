@@ -1,5 +1,22 @@
 import { query } from '../../db';
 
+function buildScopeCondition(
+  column: string,
+  values: unknown[],
+  scopes?: string[] | null,
+): string | null {
+  if (!scopes || scopes.length === 0) {
+    return null;
+  }
+
+  const placeholders = scopes.map((scope) => {
+    values.push(scope);
+    return `$${values.length}`;
+  });
+
+  return `${column} in (${placeholders.join(', ')})`;
+}
+
 type RawCertificateRow = {
   id: string;
   enrollment_id: string;
@@ -139,7 +156,15 @@ export async function insertCertificate(params: {
   });
 }
 
-export async function getCertificateById(id: string): Promise<CertificateRecord | null> {
+export async function getCertificateById(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<CertificateRecord | null> {
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  const values: unknown[] = [id];
+  const scopeCondition = buildScopeCondition('co.project_id', values, scopes);
+  const whereClause = `where c.id = $1${scopeCondition ? ` and ${scopeCondition}` : ''}`;
+
   const { rows } = await query<RawCertificateRow>(
     `select c.*, u.name as issued_by_name,
             e.beneficiary_id,
@@ -154,8 +179,8 @@ export async function getCertificateById(id: string): Promise<CertificateRecord 
        join cohorts co on co.id = e.cohort_id
        join projects p on p.id = co.project_id
   left join users u on u.id = c.issued_by
-      where c.id = $1`,
-    [id],
+      ${whereClause}`,
+    values,
   );
 
   if (rows.length === 0) {
@@ -172,35 +197,40 @@ export async function listCertificates(params: {
   cohortId?: string;
   limit: number;
   offset: number;
+  allowedProjectIds?: string[] | null;
 }): Promise<CertificateRecord[]> {
   const conditions: string[] = [];
   const values: unknown[] = [];
-  let index = 1;
 
   if (params.enrollmentId) {
-    conditions.push(`c.enrollment_id = $${index++}`);
     values.push(params.enrollmentId);
+    conditions.push(`c.enrollment_id = $${values.length}`);
   }
 
   if (params.beneficiaryId) {
-    conditions.push(`e.beneficiary_id = $${index++}`);
     values.push(params.beneficiaryId);
+    conditions.push(`e.beneficiary_id = $${values.length}`);
   }
 
   if (params.projectId) {
-    conditions.push(`co.project_id = $${index++}`);
     values.push(params.projectId);
+    conditions.push(`co.project_id = $${values.length}`);
   }
 
   if (params.cohortId) {
-    conditions.push(`co.id = $${index++}`);
     values.push(params.cohortId);
+    conditions.push(`co.id = $${values.length}`);
+  }
+
+  const scopeCondition = buildScopeCondition('co.project_id', values, params.allowedProjectIds ?? null);
+  if (scopeCondition) {
+    conditions.push(scopeCondition);
   }
 
   const whereClause = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
 
-  values.push(params.limit);
-  values.push(params.offset);
+  const limitIndex = values.push(params.limit);
+  const offsetIndex = values.push(params.offset);
 
   const { rows } = await query<RawCertificateRow>(
     `select c.*, u.name as issued_by_name,
@@ -218,7 +248,7 @@ export async function listCertificates(params: {
   left join users u on u.id = c.issued_by
       ${whereClause}
    order by c.issued_at desc
-      limit $${index++} offset $${index}`,
+      limit $${limitIndex} offset $${offsetIndex}`,
     values,
   );
 

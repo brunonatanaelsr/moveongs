@@ -2,6 +2,23 @@ import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db';
 import { AppError, NotFoundError } from '../../shared/errors';
 
+function buildScopeCondition(
+  column: string,
+  values: unknown[],
+  scopes?: string[] | null,
+): string | null {
+  if (!scopes || scopes.length === 0) {
+    return null;
+  }
+
+  const placeholders = scopes.map((scope) => {
+    values.push(scope);
+    return `$${values.length}`;
+  });
+
+  return `${column} in (${placeholders.join(', ')})`;
+}
+
 export type HouseholdMember = {
   id: string;
   name: string | null;
@@ -361,11 +378,35 @@ export async function updateBeneficiary(id: string, params: UpdateBeneficiaryPar
   });
 }
 
-export async function getBeneficiaryById(id: string): Promise<BeneficiaryRecord | null> {
+export async function getBeneficiaryById(
+  id: string,
+  allowedProjectIds?: string[] | null,
+): Promise<BeneficiaryRecord | null> {
   return withTransaction(async (client) => {
     const { rows } = await client.query('select * from beneficiaries where id = $1', [id]);
     if (rows.length === 0) {
       return null;
+    }
+
+    const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+
+    if (scopes) {
+      const scopeValues: unknown[] = [id];
+      const scopeCondition = buildScopeCondition('c.project_id', scopeValues, scopes);
+
+      const { rows: scopeRows } = await client.query(
+        `select 1
+           from enrollments e
+           join cohorts c on c.id = e.cohort_id
+          where e.beneficiary_id = $1
+            ${scopeCondition ? `and ${scopeCondition}` : ''}
+          limit 1`,
+        scopeValues,
+      );
+
+      if (scopeRows.length === 0) {
+        return null;
+      }
     }
 
     const beneficiary = mapBeneficiaryRow(rows[0]);
@@ -376,7 +417,36 @@ export async function getBeneficiaryById(id: string): Promise<BeneficiaryRecord 
   });
 }
 
-export async function listBeneficiaries(params: { search?: string; limit: number; offset: number }) {
+export async function listBeneficiaries(params: {
+  search?: string;
+  limit: number;
+  offset: number;
+  allowedProjectIds?: string[] | null;
+}) {
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.search) {
+    values.push(params.search);
+    conditions.push(`to_tsvector('simple', b.full_name) @@ plainto_tsquery('simple', $${values.length})`);
+  }
+
+  const scopeCondition = buildScopeCondition('c.project_id', values, scopes);
+  if (scopeCondition) {
+    conditions.push(`b.id in (
+      select e.beneficiary_id
+        from enrollments e
+        join cohorts c on c.id = e.cohort_id
+       where ${scopeCondition}
+    )`);
+  }
+
+  const whereClause = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
+
+  const limitIndex = values.push(params.limit);
+  const offsetIndex = values.push(params.offset);
+
   const { rows } = await query<{
     id: string;
     code: string | null;
@@ -400,11 +470,11 @@ export async function listBeneficiaries(params: { search?: string; limit: number
        from beneficiaries b
        left join beneficiary_vulnerabilities bv on bv.beneficiary_id = b.id
        left join vulnerabilities v on v.id = bv.vulnerability_id
-      where ($1::text is null or to_tsvector('simple', b.full_name) @@ plainto_tsquery('simple', $1))
-      group by b.id
+      ${whereClause}
+      group by b.id, b.code, b.full_name, b.birth_date, b.cpf, b.phone1, b.created_at, b.updated_at
       order by b.created_at desc
-      limit $2 offset $3`,
-    [params.search ?? null, params.limit, params.offset],
+      limit $${limitIndex} offset $${offsetIndex}`,
+    values,
   );
 
   return rows.map((row) => ({
