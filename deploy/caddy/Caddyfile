@@ -1,0 +1,17 @@
+{
+  auto_https off
+}
+
+:80 {
+  encode gzip
+  handle_path /health {
+    respond "OK" 200
+  }
+  reverse_proxy api:3333
+}
+
+:443 {
+  tls ${TLS_EMAIL}
+  encode gzip
+  reverse_proxy api:3333
+}

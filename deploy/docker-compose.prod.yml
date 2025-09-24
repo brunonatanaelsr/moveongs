@@ -1,0 +1,44 @@
+version: '3.9'
+
+services:
+  api:
+    image: ${IMAGE:-ghcr.io/brunonatanaelsr/moveongs:latest}
+    restart: unless-stopped
+    env_file:
+      - ./deploy/env/prod.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:3333"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.97.0
+    command: ["--config=/etc/otelcol-config.yaml"]
+    env_file:
+      - ./deploy/env/prod.collector.env
+    volumes:
+      - ./deploy/otel/collector.prod.yaml:/etc/otelcol-config.yaml:ro
+    ports:
+      - "4318:4318"
+
+  reverse-proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

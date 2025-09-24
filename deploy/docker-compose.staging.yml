@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  api:
+    image: ${IMAGE:-ghcr.io/brunonatanaelsr/moveongs:latest}
+    restart: unless-stopped
+    env_file:
+      - ./deploy/env/staging.env
+    ports:
+      - "3334:3333"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://imm:imm@postgres:5432/imm
+      REDIS_URL: redis://redis:6379
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: imm
+      POSTGRES_USER: imm
+      POSTGRES_PASSWORD: imm
+    volumes:
+      - staging_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "imm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - staging_redis:/data
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.97.0
+    command: ["--config=/etc/otelcol-config.yaml"]
+    volumes:
+      - ./deploy/otel/collector.staging.yaml:/etc/otelcol-config.yaml:ro
+    ports:
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+      - "16687:16686"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./deploy/prometheus/prometheus.staging.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - staging_grafana:/var/lib/grafana
+      - ./deploy/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - jaeger
+
+volumes:
+  staging_postgres:
+  staging_redis:
+  staging_grafana:

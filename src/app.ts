@@ -1,3 +1,6 @@
+import { context as otelContext, trace } from '@opentelemetry/api';
+import { randomUUID } from 'node:crypto';
+
 import fastify from 'fastify';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
@@ -9,10 +12,35 @@ import { getEnv } from './config/env';
 import { logger } from './config/logger';
 import { AppError } from './shared/errors';
 import { registerModules } from './modules/register-modules';
+import { setLogContext } from './observability/log-context';
 
 export async function createApp(): Promise<FastifyInstance> {
   const env = getEnv();
-  const app = fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+  const app = fastify({
+    logger: logger.child({ component: 'http' }),
+    genReqId(request) {
+      return (request.headers['x-request-id'] as string | undefined) ?? randomUUID();
+    },
+    requestIdHeader: 'x-request-id',
+    requestIdLogLabel: 'correlation_id',
+  });
+
+  app.addHook('onRequest', (request, reply, done) => {
+    const correlationId = request.id ?? randomUUID();
+    reply.header('x-request-id', correlationId);
+
+    setLogContext({ correlation_id: correlationId });
+
+    const span = trace.getSpan(otelContext.active());
+    if (span) {
+      const spanContext = span.spanContext();
+      setLogContext({ trace_id: spanContext.traceId, span_id: spanContext.spanId });
+      span.setAttribute('http.request_id', correlationId);
+    }
+
+    request.log = request.log.child({ correlation_id: correlationId });
+    done();
+  });
 
   await app.register(cors, { origin: true });
   await app.register(helmet, { contentSecurityPolicy: false });
