@@ -16,6 +16,16 @@ export type FormAttachment = {
   [key: string]: unknown;
 };
 
+export type SignatureEvidenceEntry = {
+  signer: string;
+  capturedAt?: string | null;
+  method?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  payloadHash?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
 export type FormSubmissionSummary = {
   id: string;
   beneficiaryId: string;
@@ -32,6 +42,7 @@ export type FormSubmissionRecord = FormSubmissionSummary & {
   signedBy: string[];
   signedAt: string[];
   attachments: FormAttachment[];
+  signatureEvidence: SignatureEvidenceEntry[];
   template?: FormTemplateRecord | null;
 };
 
@@ -68,6 +79,7 @@ export type CreateSubmissionInput = {
   signedBy?: string[];
   signedAt?: string[];
   attachments?: FormAttachment[];
+  signatureEvidence?: SignatureEvidenceEntry[];
   createdBy?: string | null;
 };
 
@@ -80,4 +92,5 @@ export type UpdateSubmissionParams = {
   signedBy?: string[] | null;
   signedAt?: string[] | null;
   attachments?: FormAttachment[] | null;
+  signatureEvidence?: SignatureEvidenceEntry[] | null;
 };

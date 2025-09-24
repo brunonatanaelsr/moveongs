@@ -17,6 +17,7 @@ import {
   getSubmissionOrFail,
   listFormTemplates,
   listSubmissions,
+  getFormRegistry,
   generateSubmissionPdf,
   updateFormTemplate,
   updateSubmission,
@@ -39,6 +40,13 @@ const SUBMISSION_UPDATE_REQUIREMENTS = {
 } as const;
 
 export const formRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/form-templates/registry', {
+    preHandler: [app.authenticate, app.authorize(TEMPLATE_READ_REQUIREMENTS)],
+  }, async () => {
+    const registry = await getFormRegistry();
+    return { registry };
+  });
+
   app.get('/form-templates', {
     preHandler: [app.authenticate, app.authorize(TEMPLATE_READ_REQUIREMENTS)],
   }, async (request) => {
@@ -151,6 +159,7 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       signedBy: parsedBody.data.signedBy,
       signedAt: parsedBody.data.signedAt,
       attachments: parsedBody.data.attachments,
+      signatureEvidence: parsedBody.data.signatureEvidence,
       createdBy: request.user?.sub ?? null,
     }, request.user.projectScopes && request.user.projectScopes.length > 0 ? request.user.projectScopes : null);
 
@@ -230,6 +239,10 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
 
     if (Object.prototype.hasOwnProperty.call(parsedBody.data, 'attachments')) {
       updateData.attachments = parsedBody.data.attachments ?? null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(parsedBody.data, 'signatureEvidence')) {
+      updateData.signatureEvidence = parsedBody.data.signatureEvidence ?? null;
     }
 
     const submission = await updateSubmission(

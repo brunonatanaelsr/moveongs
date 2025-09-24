@@ -1,0 +1,26 @@
+{
+  "data": "2024-08-10",
+  "pontuacoes": {
+    "qualidade_de_vida": 7,
+    "felicidade": 8,
+    "relacionamentos": 7,
+    "profissional": 6,
+    "lazer": 5,
+    "espiritualidade": 8,
+    "tempo_qualidade": 6,
+    "saude": 7,
+    "equilibrio_emocional": 6,
+    "recursos_financeiros": 5,
+    "carreira": 6,
+    "contribuicao_social": 8,
+    "familia": 7,
+    "amor": 8,
+    "vida_social": 6
+  },
+  "observacoes": "Beneficiária identificou necessidade de equilibrar tempo para lazer e investimentos no negócio próprio.",
+  "assinaturas": {
+    "beneficiaria": "Maria das Dores Silva",
+    "tecnica": "Fernanda Ramos"
+  },
+  "anexos": ["https://imm.local/anexos/roda-da-vida-2024-08.pdf"]
+}

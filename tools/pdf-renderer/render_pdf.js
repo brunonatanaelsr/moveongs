@@ -86,6 +86,10 @@ function buildHtmlDocument(body) {
     table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
     th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
     th { background: #f1f5f9; font-weight: 600; }
+    .imm-verification { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-top: 16px; font-size: 12px; }
+    .imm-qr-wrapper { margin-top: 12px; }
+    .imm-qr { width: 120px; height: 120px; }
+    .imm-signature-meta { margin: 8px 0 0 0; padding-left: 18px; list-style: disc; color: #475569; font-size: 11px; }
   </style>
 </head>
 <body>

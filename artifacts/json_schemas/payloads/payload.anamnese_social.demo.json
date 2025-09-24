@@ -1,0 +1,133 @@
+{
+  "identificacao": {
+    "nome": "Maria das Dores Silva",
+    "nome_social": "Maria Silva",
+    "data_nascimento": "1989-07-12",
+    "idade": 35,
+    "estado_civil": "Solteira",
+    "genero": "Feminino",
+    "responsavel_familiar": "Maria das Dores Silva",
+    "telefone_principal": "+55 21 98888-7777",
+    "telefones_secundarios": [
+      "+55 21 97777-6666"
+    ],
+    "email": "maria.silva@example.com",
+    "endereco": {
+      "logradouro": "Rua das Flores",
+      "numero": "120",
+      "complemento": "Casa 02",
+      "bairro": "Bom Jardim",
+      "cidade": "São Gonçalo",
+      "estado": "RJ",
+      "cep": "24710-000"
+    }
+  },
+  "documentos": {
+    "cpf": "123.456.789-00",
+    "rg": "12.345.678-9",
+    "nis": "12345678900",
+    "cns": "98765432100",
+    "outros": [
+      "Carteira de Trabalho"
+    ]
+  },
+  "composicao_familiar": [
+    {
+      "nome": "João da Silva",
+      "parentesco": "Filho",
+      "idade": 12,
+      "escolaridade": "Fundamental",
+      "ocupacao": "Estudante",
+      "renda_mensal": 0,
+      "observacoes": "Participa do reforço escolar"
+    },
+    {
+      "nome": "Ana Souza",
+      "parentesco": "Mãe",
+      "idade": 62,
+      "escolaridade": "Ensino médio",
+      "ocupacao": "Aposentada",
+      "renda_mensal": 1320
+    }
+  ],
+  "escolaridade_formacao": {
+    "nivel": "Ensino Médio Completo",
+    "situacao": "Concluído",
+    "alfabetizado": true,
+    "cursos_realizados": [
+      "Artesanato em tecido",
+      "Gestão financeira básica"
+    ],
+    "dificuldades_aprendizagem": "Relata dificuldade com matemática básica"
+  },
+  "trabalho_renda": {
+    "ocupacao_principal": "Artesã",
+    "situacao_trabalho": "Autônoma",
+    "renda_mensal": 1800,
+    "fonte_renda": "Venda de artesanato",
+    "beneficios_sociais": [
+      "Bolsa Família"
+    ],
+    "despesas_mensais": {
+      "moradia": 700,
+      "alimentacao": 500,
+      "saude": 150,
+      "educacao": 80,
+      "transporte": 120,
+      "outros": 200
+    }
+  },
+  "saude": {
+    "possui_doenca_cronica": true,
+    "descricao_doencas": "Hipertensão controlada",
+    "acompanhamento_saude": [
+      "UBS Bom Jardim"
+    ],
+    "possui_deficiencia": false,
+    "uso_medicamentos": true,
+    "descricao_medicamentos": "Losartana 50mg",
+    "servicos_saude_utilizados": [
+      "UBS",
+      "Clínica da Família"
+    ]
+  },
+  "habitacao": {
+    "tipo_moradia": "Casa de alvenaria",
+    "situacao_moradia": "Alugada",
+    "numero_comodos": 4,
+    "material_predominante": "Alvenaria",
+    "numero_moradores": 3,
+    "servicos_basicos": [
+      "Água encanada",
+      "Energia elétrica",
+      "Coleta de lixo"
+    ],
+    "risco_moradia": "Área de alagamento",
+    "observacoes": "Rua com acesso precário em dias de chuva"
+  },
+  "rede_apoio": {
+    "participa_grupo_comunitario": true,
+    "grupos": [
+      "Associação de Artesãs do bairro"
+    ],
+    "instituicoes_acompanhamento": [
+      {
+        "nome": "CRAS Jardim Catarina",
+        "tipo": "CRAS",
+        "responsavel": "Assistente social Joana"
+      }
+    ]
+  },
+  "situacao_violencia": {
+    "historico_violencia": false,
+    "tipos_violencia": [],
+    "rede_protecao_acionada": [],
+    "medidas_protecao": null
+  },
+  "expectativas_objetivos": {
+    "objetivos_curto_prazo": "Aumentar a renda com novas técnicas de artesanato",
+    "objetivos_medio_prazo": "Regularizar documentação e ampliar rede de clientes",
+    "objetivos_longo_prazo": "Abrir um ateliê comunitário",
+    "observacoes_tecnicas": "Beneficiária engajada e com boa rede comunitária"
+  }
+}

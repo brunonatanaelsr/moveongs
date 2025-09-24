@@ -31,6 +31,16 @@ export const formAttachmentSchema = z.object({
   sizeBytes: z.number().int().nonnegative().optional(),
 }).catchall(z.unknown());
 
+const signatureEvidenceSchema = z.object({
+  signer: z.string().min(1),
+  capturedAt: isoDateTime.nullable().optional(),
+  method: z.string().min(1).nullable().optional(),
+  ipAddress: z.string().min(3).nullable().optional(),
+  userAgent: z.string().min(1).nullable().optional(),
+  payloadHash: z.string().regex(/^[a-f0-9]{64}$/i).nullable().optional(),
+  metadata: z.record(z.string(), z.any()).nullable().optional(),
+});
+
 const baseSubmissionSchema = z.object({
   formType: z.string().min(1),
   schemaVersion: z.string().min(1).optional(),
@@ -38,6 +48,7 @@ const baseSubmissionSchema = z.object({
   signedBy: z.array(z.string().min(1)).optional(),
   signedAt: z.array(isoDateTime).optional(),
   attachments: z.array(formAttachmentSchema).optional(),
+  signatureEvidence: z.array(signatureEvidenceSchema).optional(),
 });
 
 export const createFormSubmissionBodySchema = baseSubmissionSchema.superRefine((data, ctx) => {
@@ -48,6 +59,22 @@ export const createFormSubmissionBodySchema = baseSubmissionSchema.superRefine((
       path: ['signedAt'],
     });
   }
+
+  if (data.signatureEvidence && data.signedBy && data.signatureEvidence.length !== data.signedBy.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'signatureEvidence must have the same number of entries as signedBy',
+      path: ['signatureEvidence'],
+    });
+  }
+
+  if (data.signatureEvidence && data.signedAt && data.signatureEvidence.length !== data.signedAt.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'signatureEvidence must have the same number of entries as signedAt',
+      path: ['signatureEvidence'],
+    });
+  }
 });
 
 export const updateFormSubmissionBodySchema = z.object({
@@ -55,12 +82,29 @@ export const updateFormSubmissionBodySchema = z.object({
   signedBy: z.array(z.string().min(1)).nullable().optional(),
   signedAt: z.array(isoDateTime).nullable().optional(),
   attachments: z.array(formAttachmentSchema).nullable().optional(),
+  signatureEvidence: z.array(signatureEvidenceSchema).nullable().optional(),
 }).superRefine((data, ctx) => {
   if (data.signedAt && data.signedBy && data.signedAt.length !== data.signedBy.length) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'signedAt must have the same number of entries as signedBy',
       path: ['signedAt'],
+    });
+  }
+
+  if (data.signatureEvidence && data.signedBy && data.signatureEvidence.length !== data.signedBy.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'signatureEvidence must have the same number of entries as signedBy',
+      path: ['signatureEvidence'],
+    });
+  }
+
+  if (data.signatureEvidence && data.signedAt && data.signatureEvidence.length !== data.signedAt.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'signatureEvidence must have the same number of entries as signedAt',
+      path: ['signatureEvidence'],
     });
   }
 });

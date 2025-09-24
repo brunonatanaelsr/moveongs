@@ -11,6 +11,7 @@ import type {
   FormTemplateRecord,
   ListSubmissionsFilters,
   ListTemplatesFilters,
+  SignatureEvidenceEntry,
   UpdateSubmissionParams,
   UpdateTemplateParams,
 } from './types';
@@ -87,6 +88,69 @@ function mapAttachments(raw: unknown): FormAttachment[] {
   return [];
 }
 
+function mapSignatureEvidence(raw: unknown): SignatureEvidenceEntry[] {
+  if (!raw) {
+    return [];
+  }
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => coerceSignatureEvidence(item))
+      .filter((value): value is SignatureEvidenceEntry => Boolean(value));
+  }
+
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => coerceSignatureEvidence(item))
+          .filter((value): value is SignatureEvidenceEntry => Boolean(value));
+      }
+      if (parsed && typeof parsed === 'object') {
+        const value = coerceSignatureEvidence(parsed);
+        return value ? [value] : [];
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const value = coerceSignatureEvidence(raw);
+    return value ? [value] : [];
+  }
+
+  return [];
+}
+
+function coerceSignatureEvidence(value: unknown): SignatureEvidenceEntry | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const signer = typeof record.signer === 'string' ? record.signer : null;
+  if (!signer) {
+    return null;
+  }
+
+  const metadata = record.metadata;
+
+  return {
+    signer,
+    capturedAt: toIsoString(record.capturedAt),
+    method: typeof record.method === 'string' ? record.method : null,
+    ipAddress: typeof record.ipAddress === 'string' ? record.ipAddress : null,
+    userAgent: typeof record.userAgent === 'string' ? record.userAgent : null,
+    payloadHash: typeof record.payloadHash === 'string' ? record.payloadHash : null,
+    metadata:
+      metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+        ? (metadata as Record<string, unknown>)
+        : null,
+  };
+}
+
 function mapSubmissionSummaryRow(row: any): FormSubmissionSummary {
   return {
     id: row.id,
@@ -115,6 +179,7 @@ function mapSubmissionRow(row: any): FormSubmissionRecord {
     signedBy: Array.isArray(row.signed_by) ? (row.signed_by as string[]) : [],
     signedAt: mapTimestampArray(row.signed_at),
     attachments: mapAttachments(row.attachments),
+    signatureEvidence: mapSignatureEvidence(row.signature_evidence),
     template: row.template_id
       ? {
           id: row.template_id,
@@ -390,9 +455,10 @@ export async function createFormSubmission(params: CreateSubmissionParams): Prom
          payload,
          signed_by,
          signed_at,
+         signature_evidence,
          attachments,
          created_by
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        returning id`,
       [
         id,
@@ -402,6 +468,7 @@ export async function createFormSubmission(params: CreateSubmissionParams): Prom
         params.payload,
         params.signedBy ?? null,
         signedAt,
+        params.signatureEvidence ?? null,
         params.attachments ?? null,
         params.createdBy ?? null,
       ],
@@ -463,6 +530,11 @@ export async function updateFormSubmission(id: string, params: UpdateSubmissionP
     if (params.attachments !== undefined) {
       values.push(params.attachments);
       updates.push(`attachments = $${values.length}`);
+    }
+
+    if (params.signatureEvidence !== undefined) {
+      values.push(params.signatureEvidence);
+      updates.push(`signature_evidence = $${values.length}`);
     }
 
     if (updates.length > 0) {

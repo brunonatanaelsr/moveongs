@@ -1,0 +1,142 @@
+{
+  "registryVersion": "2024.10",
+  "updatedAt": "2024-10-01T00:00:00Z",
+  "forms": [
+    {
+      "type": "anamnese_social",
+      "title": "Anamnese Social",
+      "category": "acolhimento",
+      "description": "Instrumento padrão de acolhimento para levantar perfil socioeconômico, rede de apoio e demandas prioritárias da beneficiária.",
+      "owner": "servico_social",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": true,
+          "effectiveAt": "2024-02-01",
+          "schemaFile": "form.anamnese_social.v1.json",
+          "notes": "Versão inicial alinhada ao prontuário SUAS."
+        }
+      ]
+    },
+    {
+      "type": "ficha_evolucao",
+      "title": "Ficha de Evolução",
+      "category": "atendimentos",
+      "description": "Registro estruturado das evoluções de acompanhamento individual ou coletivo.",
+      "owner": "tecnica",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": true,
+          "effectiveAt": "2024-02-01",
+          "schemaFile": "form.ficha_evolucao.v1.json",
+          "notes": "Inclui identificação de atendimento, avaliação e encaminhamentos."
+        }
+      ]
+    },
+    {
+      "type": "plano_acao",
+      "title": "Plano de Ação Individual",
+      "category": "planejamento",
+      "description": "Plano individual com metas, responsáveis e indicadores de acompanhamento.",
+      "owner": "tecnica",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": false,
+          "effectiveAt": "2024-03-10",
+          "schemaFile": "form.plano_acao.v1.json",
+          "notes": "Estrutura inicial com metas SMART e monitoramento trimestral."
+        }
+      ]
+    },
+    {
+      "type": "inscricao_projeto",
+      "title": "Ficha de Inscrição de Projeto",
+      "category": "cadastro",
+      "description": "Formulário para inscrição das beneficiárias nas turmas e projetos ativos.",
+      "owner": "recepcao",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": true,
+          "effectiveAt": "2024-01-15",
+          "schemaFile": "form.inscricao_projeto.v1.json",
+          "notes": "Compatível com coleta de dados de presença e consentimentos."
+        }
+      ]
+    },
+    {
+      "type": "declaracao_recibo",
+      "title": "Declaração de Recibo",
+      "category": "financeiro",
+      "description": "Recibo oficial para entregas de benefícios, kits ou auxílios financeiros.",
+      "owner": "financeiro",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": false,
+          "effectiveAt": "2024-05-20",
+          "schemaFile": "form.declaracao_recibo.v1.json",
+          "notes": "Contempla campos para hash de verificação e anexos comprobatórios."
+        }
+      ]
+    },
+    {
+      "type": "consentimentos",
+      "title": "Registro de Consentimentos",
+      "category": "lgpd",
+      "description": "Coleta dos consentimentos de uso de imagem e dados pessoais conforme LGPD.",
+      "owner": "juridico",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": true,
+          "effectiveAt": "2024-01-10",
+          "schemaFile": "form.consentimentos.v1.json",
+          "notes": "Prevê registro de canal, vigência e evidências de aceite."
+        }
+      ]
+    },
+    {
+      "type": "roda_da_vida",
+      "title": "Roda da Vida",
+      "category": "diagnostico",
+      "description": "Ferramenta visual para diagnóstico de dimensões de bem-estar e autonomia.",
+      "owner": "psicologia",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": false,
+          "effectiveAt": "2024-04-05",
+          "schemaFile": "form.roda_da_vida.v1.json",
+          "notes": "Escala de 0 a 10 para 12 dimensões com comentários qualitativos."
+        }
+      ]
+    },
+    {
+      "type": "visao_holistica",
+      "title": "Visão Holística Familiar",
+      "category": "diagnostico",
+      "description": "Mapa das condições do núcleo familiar, rede de apoio e indicadores de risco.",
+      "owner": "servico_social",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "active",
+          "mandatory": true,
+          "effectiveAt": "2024-04-20",
+          "schemaFile": "form.visao_holistica.v1.json",
+          "notes": "Inclui composição familiar, renda e necessidades prioritárias."
+        }
+      ]
+    }
+  ]
+}

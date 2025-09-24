@@ -96,6 +96,7 @@ create table if not exists form_submissions (
   payload jsonb not null,
   signed_by text[],
   signed_at timestamptz[],
+  signature_evidence jsonb,
   attachments jsonb,
   created_by uuid references users(id),
   created_at timestamptz default now(),

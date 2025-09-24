@@ -1,0 +1,59 @@
+{
+  "identificacao_atendimento": {
+    "beneficiaria_nome": "Maria das Dores Silva",
+    "beneficiaria_id": "demo-beneficiaria-001",
+    "data_atendimento": "2024-08-05",
+    "horario_inicio": "14:00",
+    "horario_termino": "15:20",
+    "profissional_responsavel": "Carla Souza",
+    "funcao_profissional": "Assistente Social",
+    "tipo_atendimento": "Atendimento individual",
+    "local_atendimento": "Sala de escuta",
+    "participantes": ["Maria das Dores Silva"],
+    "modalidade": "Presencial"
+  },
+  "descricao_atendimento": {
+    "relato_sessao": "A beneficiária relatou avanços na organização financeira doméstica e trouxe dúvidas sobre acesso a microcrédito.",
+    "contexto": "Atendimento de acompanhamento mensal",
+    "observacoes_profissional": "Notou-se melhora significativa na autoestima."
+  },
+  "avaliacao": {
+    "indicadores": [
+      {
+        "descricao": "Adesão às atividades propostas",
+        "escala": 4,
+        "comentario": "Participa de todas as oficinas previstas."
+      },
+      {
+        "descricao": "Desenvolvimento socioemocional",
+        "escala": 3,
+        "comentario": "Demonstra confiança crescente no grupo."
+      }
+    ],
+    "satisfacao_beneficiaria": 5,
+    "percepcoes": "Beneficiária relatou sentir-se acolhida pela equipe."
+  },
+  "encaminhamentos": {
+    "internos": [
+      {
+        "descricao": "Participar da roda de conversa sobre educação financeira",
+        "responsavel": "Equipe Social",
+        "prazo": "2024-08-20"
+      }
+    ],
+    "externos": [
+      {
+        "descricao": "Consulta com nutricionista na UBS",
+        "instituicao": "UBS Bom Jardim",
+        "contato": "(21) 3333-2222",
+        "prazo": "2024-09-01"
+      }
+    ]
+  },
+  "anexos_relevantes": [
+    {
+      "descricao": "Plano alimentar atualizado",
+      "url": "https://imm.local/anexos/plano-alimentar.pdf"
+    }
+  ]
+}

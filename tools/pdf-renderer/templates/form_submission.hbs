@@ -15,6 +15,15 @@
   {{#if generatedAt}}
   <p><strong>Documento gerado em:</strong> {{generatedAt}}</p>
   {{/if}}
+  <div class="imm-verification">
+    <p><strong>Hash de verificação:</strong> {{verification.hash}}</p>
+    <p><strong>Verificação pública:</strong> {{verification.url}}</p>
+    {{#if verification.qrCodeDataUrl}}
+    <div class="imm-qr-wrapper">
+      <img src="{{verification.qrCodeDataUrl}}" alt="QR code para verificação" class="imm-qr" />
+    </div>
+    {{/if}}
+  </div>
 </section>
 
 {{#each sections}}
@@ -40,6 +49,8 @@
       <tr>
         <th>Responsável</th>
         <th>Data</th>
+        <th>Método</th>
+        <th>IP</th>
       </tr>
     </thead>
     <tbody>
@@ -47,7 +58,20 @@
       <tr>
         <td>{{name}}</td>
         <td>{{#if signedAt}}{{signedAt}}{{else}}Não informado{{/if}}</td>
+        <td>{{#if method}}{{method}}{{else}}Não informado{{/if}}</td>
+        <td>{{#if ipAddress}}{{ipAddress}}{{else}}-{{/if}}</td>
       </tr>
+      {{#if metadata.length}}
+      <tr>
+        <td colspan="4">
+          <ul class="imm-signature-meta">
+            {{#each metadata}}
+            <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </td>
+      </tr>
+      {{/if}}
       {{/each}}
     </tbody>
   </table>

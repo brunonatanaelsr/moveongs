@@ -1,0 +1,42 @@
+{
+  "identificacao": {
+    "nome": "Maria das Dores Silva",
+    "nome_social": "Maria Silva",
+    "data_nascimento": "1989-07-12",
+    "documentos": {
+      "cpf": "123.456.789-00",
+      "rg": "12.345.678-9"
+    },
+    "contatos": {
+      "telefone": "+55 21 98888-7777",
+      "email": "maria.silva@example.com"
+    }
+  },
+  "projeto": {
+    "nome": "Oficina de Gastronomia Social",
+    "dia_semana": "Terça-feira",
+    "turno": "Manhã",
+    "local": "Cozinha Escola",
+    "pre_requisitos": ["Disponibilidade semanal", "Interesse em geração de renda"]
+  },
+  "informacoes_socioeconomicas": {
+    "situacao_trabalho": "Autônoma",
+    "renda_familiar": 3120,
+    "moradia": "Alugada",
+    "participa_programas_sociais": true,
+    "programas_sociais": ["Bolsa Família"]
+  },
+  "acordos_convivencia": [
+    {
+      "slug": "pontualidade",
+      "descricao": "Compromisso com a assiduidade e pontualidade",
+      "aceite": true,
+      "observacoes": "Compreende que três faltas injustificadas implicam desligamento"
+    },
+    {
+      "slug": "uso_espaco",
+      "descricao": "Zelar pelo espaço físico e equipamentos",
+      "aceite": true
+    }
+  ]
+}

@@ -1,23 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { hash } from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import { getEnv } from '../config/env';
 import { pool } from '../db/pool';
 import { logger } from '../config/logger';
-
-type SeedFormTemplate = {
-  formType: string;
-  schemaVersion: string;
-  file: string;
-  status?: 'active' | 'inactive';
-};
-
-const FORM_TEMPLATE_SEED: SeedFormTemplate[] = [
-  { formType: 'anamnese_social', schemaVersion: 'v1', file: 'form.anamnese_social.v1.json' },
-  { formType: 'ficha_evolucao', schemaVersion: 'v1', file: 'form.ficha_evolucao.v1.json' },
-];
+import { loadFormRegistry } from '../modules/forms/registry';
 
 const ROLE_SEED = [
   { slug: 'admin', name: 'Admin' },
@@ -60,6 +49,78 @@ const RESOURCE_SEED = [
   { slug: 'audit_logs', description: 'Trilha de auditoria' },
   { slug: 'evolutions', description: 'Registros de evolução/atendimentos' },
   { slug: 'action_plans', description: 'Planos de ação e tarefas' }
+];
+
+type DemoFormSeedConfig = {
+  formType: string;
+  payloadFile: string;
+  professional?: string | null;
+  attachments?: Array<{
+    fileName?: string | null;
+    url?: string | null;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+  }>;
+  limit?: number;
+};
+
+const DEMO_FORM_CONFIGS: DemoFormSeedConfig[] = [
+  {
+    formType: 'anamnese_social',
+    payloadFile: 'payload.anamnese_social.demo.json',
+    professional: 'Carla Souza',
+    limit: 8,
+  },
+  {
+    formType: 'ficha_evolucao',
+    payloadFile: 'payload.ficha_evolucao.demo.json',
+    professional: 'Carla Souza',
+    limit: 6,
+  },
+  {
+    formType: 'plano_acao',
+    payloadFile: 'payload.plano_acao.demo.json',
+    professional: 'Carla Souza',
+    limit: 5,
+  },
+  {
+    formType: 'inscricao_projeto',
+    payloadFile: 'payload.inscricao_projeto.demo.json',
+    professional: 'Ana Paula Santos',
+    limit: 6,
+  },
+  {
+    formType: 'declaracao_recibo',
+    payloadFile: 'payload.declaracao_recibo.demo.json',
+    professional: 'Ana Paula Santos',
+    limit: 4,
+    attachments: [
+      {
+        fileName: 'recibo-assinado.pdf',
+        mimeType: 'application/pdf',
+        url: 'https://imm.local/anexos/recibo-assinado.pdf',
+        sizeBytes: 245000,
+      },
+    ],
+  },
+  {
+    formType: 'consentimentos',
+    payloadFile: 'payload.consentimentos.demo.json',
+    professional: 'Ana Souza',
+    limit: 6,
+  },
+  {
+    formType: 'roda_da_vida',
+    payloadFile: 'payload.roda_da_vida.demo.json',
+    professional: 'Fernanda Ramos',
+    limit: 5,
+  },
+  {
+    formType: 'visao_holistica',
+    payloadFile: 'payload.visao_holistica.demo.json',
+    professional: 'Carla Souza',
+    limit: 5,
+  },
 ];
 
 const PERMISSION_SEED = [
@@ -467,7 +528,17 @@ async function seedAdminUser() {
 async function seedFormTemplates() {
   const baseDir = path.join(__dirname, '../../artifacts/json_schemas');
 
-  for (const template of FORM_TEMPLATE_SEED) {
+  const registry = await loadFormRegistry();
+  const templates = registry.forms.flatMap((entry) =>
+    entry.versions.map((version) => ({
+      formType: entry.type,
+      schemaVersion: version.version,
+      file: version.schemaFile,
+      status: version.status === 'active' ? 'active' : 'inactive',
+    })),
+  );
+
+  for (const template of templates) {
     const schemaPath = path.join(baseDir, template.file);
     let schema: unknown;
 
@@ -532,6 +603,106 @@ export async function seedDatabase() {
   await seedFormTemplates();
   await seedDemoData();
   logger.info('Seed completed');
+}
+
+async function seedDemoFormSubmissions(
+  beneficiaries: Array<{ id: string; full_name: string }>,
+  createdBy: string | null,
+) {
+  const payloadDir = path.join(__dirname, '../../artifacts/json_schemas/payloads');
+
+  for (const config of DEMO_FORM_CONFIGS) {
+    const payloadPath = path.join(payloadDir, config.payloadFile);
+    let payload: Record<string, unknown>;
+
+    try {
+      const raw = await fs.readFile(payloadPath, 'utf8');
+      payload = JSON.parse(raw) as Record<string, unknown>;
+    } catch (error) {
+      logger.error({ payloadPath, err: error }, 'failed to load demo form payload');
+      continue;
+    }
+
+    const { rows: templateRows } = await pool.query<{ schema_version: string }>(
+      `select schema_version from form_templates
+         where form_type = $1 and status = 'active'
+         order by published_at desc nulls last, schema_version desc
+         limit 1`,
+      [config.formType],
+    );
+
+    if (templateRows.length === 0) {
+      logger.warn({ formType: config.formType }, 'skipping demo form seeding; template not found');
+      continue;
+    }
+
+    const schemaVersion = templateRows[0].schema_version;
+    const targets = beneficiaries.slice(0, config.limit ?? 5);
+    let inserted = 0;
+
+    for (const [index, beneficiary] of targets.entries()) {
+      const existing = await pool.query('select id from form_submissions where beneficiary_id = $1 and form_type = $2 limit 1', [
+        beneficiary.id,
+        config.formType,
+      ]);
+
+      if (existing.rowCount && existing.rowCount > 0) {
+        continue;
+      }
+
+      const baseDate = new Date(Date.now() - (index + 1) * 5 * 86_400_000);
+      const signedBy = [beneficiary.full_name];
+      if (config.professional) {
+        signedBy.push(config.professional);
+      }
+
+      const signedAt = signedBy.map((_, position) => {
+        const signatureDate = new Date(baseDate.getTime() + position * 3_600_000);
+        return signatureDate.toISOString();
+      });
+
+      const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+
+      const signatureEvidence = signedBy.map((name, position) => ({
+        signer: name,
+        capturedAt: signedAt[position] ?? new Date().toISOString(),
+        method: position === 0 ? 'assinatura_biometrica' : 'assinatura_credenciada',
+        ipAddress: position === 0 ? '10.0.0.42' : '10.0.0.11',
+        userAgent: position === 0 ? 'MoveForms/1.0 (Android 13)' : 'MoveForms/1.0 (Web Chrome)',
+        payloadHash,
+        metadata: {
+          role: position === 0 ? 'beneficiaria' : 'profissional',
+          location: 'Sede Instituto Move Marias',
+          sessionId: `demo-${config.formType}-${index + 1}`,
+        },
+      }));
+
+      await pool.query(
+        `insert into form_submissions (
+           id, beneficiary_id, form_type, schema_version, payload,
+           signed_by, signed_at, signature_evidence, attachments, created_by
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          randomUUID(),
+          beneficiary.id,
+          config.formType,
+          schemaVersion,
+          payload,
+          signedBy,
+          signedAt.map((value) => new Date(value)),
+          signatureEvidence,
+          config.attachments ?? null,
+          createdBy,
+        ],
+      );
+
+      inserted += 1;
+    }
+
+    if (inserted > 0) {
+      logger.info({ formType: config.formType, inserted }, 'seeded demo form submissions');
+    }
+  }
 }
 
 async function run() {
@@ -703,6 +874,8 @@ async function seedDemoData() {
 
   const { rows: users } = await pool.query<{ id: string }>(`select id from users order by created_at asc limit 1`);
   const createdBy = users[0]?.id ?? null;
+
+  await seedDemoFormSubmissions(beneficiaries, createdBy);
 
   if (createdBy) {
     const planTargets = beneficiaries.slice(0, 12);

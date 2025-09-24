@@ -13,6 +13,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
   CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
   UPLOADS_DIR: z.string().default('tmp/uploads'),
+  PUBLIC_APP_BASE_URL: z.string().url().default('https://imm.local'),
   NOTIFICATIONS_EMAIL_FROM: z.string().email().default('alerts@imm.local'),
   NOTIFICATIONS_EMAIL_RECIPIENTS: z.string().optional(),
   NOTIFICATIONS_WHATSAPP_NUMBERS: z.string().optional(),

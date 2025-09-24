@@ -1,0 +1,35 @@
+{
+  "objetivo_principal": "Gerar renda mínima de dois salários com produção artesanal",
+  "areas_prioritarias": ["Geração de renda", "Autonomia financeira"],
+  "acoes": [
+    {
+      "descricao": "Participar do curso de gestão financeira",
+      "responsavel": "Maria das Dores Silva",
+      "prazo": "2024-09-30",
+      "status": "em_andamento",
+      "suporte_instituto": "Mentorias quinzenais",
+      "observacoes": "Inscrição confirmada"
+    },
+    {
+      "descricao": "Criar catálogo digital dos produtos",
+      "responsavel": "Equipe de comunicação",
+      "prazo": "2024-10-15",
+      "status": "pendente",
+      "suporte_instituto": "Designer voluntário",
+      "observacoes": "Sessão de fotos agendada"
+    }
+  ],
+  "avaliacoes_semestrais": [
+    {
+      "data": "2024-12-15",
+      "avaliacao": "Beneficiária atingiu 70% da meta de renda",
+      "responsavel": "Assistente social"
+    }
+  ],
+  "assinaturas": {
+    "beneficiaria": "Maria das Dores Silva",
+    "tecnica": "Carla Souza",
+    "coordenacao": "Patrícia Lima"
+  },
+  "anexos": ["https://imm.local/anexos/plano-acao.pdf"]
+}

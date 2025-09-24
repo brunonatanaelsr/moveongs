@@ -1,0 +1,25 @@
+{
+  "declaracao_comparecimento": {
+    "cpf": "123.456.789-00",
+    "paedi": "PAEDI-2024-045",
+    "local": "Sede Instituto Move Marias",
+    "data": "2024-08-02",
+    "hora_inicio": "09:00",
+    "hora_fim": "11:30",
+    "responsavel": "Patrícia Lima",
+    "atividades_realizadas": ["Oficina de gastronomia social", "Atendimento psicossocial"],
+    "observacoes": "Beneficiária participou integralmente das atividades previstas."
+  },
+  "recibo_beneficio": {
+    "cpf": "123.456.789-00",
+    "paedi": "PAEDI-2024-045",
+    "descricao_beneficio": "Entrega de kit alimentação e auxílio transporte",
+    "itens": [
+      {"descricao": "Cesta básica", "quantidade": 1, "valor_unitario": 150.0},
+      {"descricao": "Vale transporte", "quantidade": 8, "valor_unitario": 4.50}
+    ],
+    "data": "2024-08-02",
+    "responsavel_registro": "Ana Paula Santos",
+    "observacoes": "Beneficiária assinou digitalmente o comprovante"
+  }
+}

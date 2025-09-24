@@ -1,0 +1,41 @@
+{
+  "dados_titular": {
+    "nome": "Maria das Dores Silva",
+    "documentos": {
+      "cpf": "123.456.789-00"
+    },
+    "contatos": {
+      "telefone": "+55 21 98888-7777",
+      "email": "maria.silva@example.com"
+    }
+  },
+  "consentimentos": [
+    {
+      "tipo": "uso_imagem",
+      "descricao": "Autorizo o uso da minha imagem em materiais institucionais",
+      "aceite": true,
+      "validade": "2025-12-31",
+      "canal": "Tablet",
+      "responsavel": "Ana Souza",
+      "observacoes": "Consentimento coletado durante evento de integração"
+    },
+    {
+      "tipo": "compartilhamento_dados",
+      "descricao": "Autorizo o compartilhamento dos meus dados com parceiros do projeto",
+      "aceite": false,
+      "motivo_recusa": "Prefere validar caso a caso",
+      "canal": "Tablet"
+    }
+  ],
+  "testemunhas": [
+    {
+      "nome": "João Pereira",
+      "relacao": "Educador social"
+    }
+  ],
+  "registro_evidencias": {
+    "local": "Sede Instituto Move Marias",
+    "capturado_por": "Ana Souza",
+    "observacoes": "Beneficiária solicitou revisão em 12 meses"
+  }
+}
