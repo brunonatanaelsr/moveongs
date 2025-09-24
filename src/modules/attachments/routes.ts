@@ -39,9 +39,12 @@ export const attachmentRoutes: FastifyPluginAsync = async (app) => {
     const fieldEntries: Record<string, string> = {};
     for (const [key, value] of Object.entries(file.fields ?? {})) {
       if (Array.isArray(value)) {
-        fieldEntries[key] = value[0]?.value ?? '';
-      } else if (value && typeof value === 'object') {
-        fieldEntries[key] = value.value;
+        const entry = value[0];
+        if (entry && typeof entry === 'object' && 'value' in entry) {
+          fieldEntries[key] = String(entry.value ?? '');
+        }
+      } else if (value && typeof value === 'object' && 'value' in value) {
+        fieldEntries[key] = String((value as { value?: unknown }).value ?? '');
       }
     }
 

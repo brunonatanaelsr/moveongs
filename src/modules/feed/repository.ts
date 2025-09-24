@@ -272,7 +272,12 @@ export async function updatePost(id: string, params: {
       [id, projectId ?? null, title ?? null, body ?? null, tags && tags.length > 0 ? tags : null, visibility, publishedAt],
     );
 
-    return fetchPostById(id);
+    const updated = await fetchPostById(id);
+    if (!updated) {
+      throw new NotFoundError('Post not found');
+    }
+
+    return updated;
   });
 }
 

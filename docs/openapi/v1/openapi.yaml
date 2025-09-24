@@ -1,0 +1,1334 @@
+openapi: 3.0.3
+info:
+  title: MoveONgs API
+  description: |
+    Especificação versionada dos principais endpoints REST do backend MoveONgs.
+    Use este documento para integrações de clientes, geração de SDKs e revisões
+    de conformidade. Cada alteração de contrato deve ser refletida nesta versão.
+  version: 1.0.0
+servers:
+  - url: https://api.dev.moveongs.local
+    description: Ambiente de desenvolvimento
+  - url: https://api.staging.moveongs.org
+    description: Homologação
+  - url: https://api.moveongs.org
+    description: Produção
+tags:
+  - name: System
+  - name: Auth
+  - name: Beneficiaries
+  - name: Projects
+  - name: Forms
+  - name: Analytics
+  - name: Feed
+  - name: Messages
+  - name: Attachments
+  - name: Timeline
+  - name: Evolutions
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Status da API
+      security: []
+      responses:
+        '200':
+          description: Serviço disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autentica usuário com e-mail e senha
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: Token JWT gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Retorna o usuário autenticado
+      responses:
+        '200':
+          description: Perfil ativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AppUser'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /beneficiaries:
+    get:
+      tags: [Beneficiaries]
+      summary: Lista beneficiárias com filtro opcional de busca
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BeneficiarySummary'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Beneficiaries]
+      summary: Cria uma nova beneficiária
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBeneficiaryRequest'
+      responses:
+        '201':
+          description: Beneficiária cadastrada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  beneficiary:
+                    $ref: '#/components/schemas/Beneficiary'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /beneficiaries/{id}:
+    get:
+      tags: [Beneficiaries]
+      summary: Detalhes completos
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+      responses:
+        '200':
+          description: Registro encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  beneficiary:
+                    $ref: '#/components/schemas/Beneficiary'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Beneficiaries]
+      summary: Atualiza campos selecionados
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBeneficiaryRequest'
+      responses:
+        '200':
+          description: Beneficiária atualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  beneficiary:
+                    $ref: '#/components/schemas/Beneficiary'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /projects:
+    get:
+      tags: [Projects]
+      summary: Lista projetos ativos
+      responses:
+        '200':
+          description: Projetos retornados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Projects]
+      summary: Cria um projeto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Projeto criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /projects/{id}/cohorts:
+    get:
+      tags: [Projects]
+      summary: Lista turmas do projeto
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Turmas retornadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Cohort'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Projects]
+      summary: Cria uma turma
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCohortRequest'
+      responses:
+        '201':
+          description: Turma criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cohort:
+                    $ref: '#/components/schemas/Cohort'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /enrollments:
+    get:
+      tags: [Projects]
+      summary: Lista inscrições
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Inscrições
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Enrollment'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Projects]
+      summary: Cria inscrição em turma
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnrollmentRequest'
+      responses:
+        '201':
+          description: Inscrição criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enrollment:
+                    $ref: '#/components/schemas/Enrollment'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /form-templates:
+    get:
+      tags: [Forms]
+      summary: Lista modelos publicados
+      responses:
+        '200':
+          description: Modelos retornados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FormTemplate'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Forms]
+      summary: Cadastra modelo de formulário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFormTemplateRequest'
+      responses:
+        '201':
+          description: Modelo criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  template:
+                    $ref: '#/components/schemas/FormTemplate'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /beneficiaries/{id}/forms:
+    get:
+      tags: [Forms]
+      summary: Lista submissões por beneficiária
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Submissões retornadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FormSubmission'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Forms]
+      summary: Cria submissão vinculada à beneficiária
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFormSubmissionRequest'
+      responses:
+        '201':
+          description: Submissão criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission:
+                    $ref: '#/components/schemas/FormSubmission'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /forms/{id}/pdf:
+    get:
+      tags: [Forms]
+      summary: Exporta submissão em PDF
+      parameters:
+        - $ref: '#/components/parameters/FormSubmissionId'
+      responses:
+        '200':
+          description: PDF gerado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /analytics/overview:
+    get:
+      tags: [Analytics]
+      summary: Indicadores agregados
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Indicadores atuais
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /feed/posts:
+    get:
+      tags: [Feed]
+      summary: Lista posts visíveis
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Posts disponíveis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedPost'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Feed]
+      summary: Publica um post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFeedPostRequest'
+      responses:
+        '201':
+          description: Post criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post:
+                    $ref: '#/components/schemas/FeedPost'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /messages/threads:
+    get:
+      tags: [Messages]
+      summary: Lista threads com participação do usuário
+      responses:
+        '200':
+          description: Threads retornadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MessageThread'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Messages]
+      summary: Cria uma nova thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThreadRequest'
+      responses:
+        '201':
+          description: Thread criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /attachments:
+    get:
+      tags: [Attachments]
+      summary: Lista anexos vinculados
+      parameters:
+        - name: ownerType
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ownerId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Anexos retornados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Attachments]
+      summary: Faz upload de arquivo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                ownerType:
+                  type: string
+                ownerId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Anexo cadastrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachment:
+                    $ref: '#/components/schemas/Attachment'
+        '400':
+          description: Upload inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /beneficiaries/{id}/timeline:
+    get:
+      tags: [Timeline]
+      summary: Retorna eventos consolidados
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Eventos ordenados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimelineEvent'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /beneficiaries/{id}/evolutions:
+    get:
+      tags: [Evolutions]
+      summary: Lista evoluções registradas
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Evoluções
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Evolution'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Evolutions]
+      summary: Registra nova evolução
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEvolutionRequest'
+      responses:
+        '201':
+          description: Evolução criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evolution:
+                    $ref: '#/components/schemas/Evolution'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    UnauthorizedError:
+      description: Token ausente ou inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  parameters:
+    BeneficiaryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FormSubmissionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        details:
+          nullable: true
+          description: Informações adicionais sobre o erro
+    AuthLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    RoleAssignment:
+      type: object
+      properties:
+        slug:
+          type: string
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+    PermissionGrant:
+      type: object
+      properties:
+        key:
+          type: string
+        resource:
+          type: string
+        action:
+          type: string
+        scope:
+          type: string
+    AppUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleAssignment'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionGrant'
+    AuthLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/AppUser'
+    PaginationMeta:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+    HouseholdMember:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        works:
+          type: boolean
+          nullable: true
+        income:
+          type: number
+          format: float
+          nullable: true
+        schooling:
+          type: string
+          nullable: true
+        relationship:
+          type: string
+          nullable: true
+    VulnerabilityTag:
+      type: object
+      properties:
+        slug:
+          type: string
+        label:
+          type: string
+          nullable: true
+    Beneficiary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        cpf:
+          type: string
+          nullable: true
+        phone1:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        neighborhood:
+          type: string
+          nullable: true
+        householdMembers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseholdMember'
+        vulnerabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/VulnerabilityTag'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BeneficiarySummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        cpf:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    CreateBeneficiaryRequest:
+      type: object
+      required: [fullName]
+      properties:
+        fullName:
+          type: string
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        cpf:
+          type: string
+          nullable: true
+        phone1:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        neighborhood:
+          type: string
+          nullable: true
+        householdMembers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseholdMember'
+        vulnerabilities:
+          type: array
+          items:
+            type: string
+    UpdateBeneficiaryRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateBeneficiaryRequest'
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+    CreateProjectRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+    Cohort:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        weekday:
+          type: integer
+        shift:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        capacity:
+          type: integer
+        location:
+          type: string
+          nullable: true
+    CreateCohortRequest:
+      type: object
+      required: [code, weekday, shift, startTime, endTime]
+      properties:
+        code:
+          type: string
+        weekday:
+          type: integer
+        shift:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        capacity:
+          type: integer
+        location:
+          type: string
+          nullable: true
+    Enrollment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        beneficiaryId:
+          type: string
+          format: uuid
+        cohortId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        enrolledAt:
+          type: string
+          format: date
+        terminatedAt:
+          type: string
+          format: date
+          nullable: true
+    CreateEnrollmentRequest:
+      type: object
+      required: [beneficiaryId, cohortId]
+      properties:
+        beneficiaryId:
+          type: string
+          format: uuid
+        cohortId:
+          type: string
+          format: uuid
+        enrolledAt:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [active, suspended, terminated]
+    FormTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        formType:
+          type: string
+        schemaVersion:
+          type: string
+        status:
+          type: string
+        schema:
+          type: object
+    CreateFormTemplateRequest:
+      type: object
+      required: [formType, schemaVersion, schema]
+      properties:
+        formType:
+          type: string
+        schemaVersion:
+          type: string
+        status:
+          type: string
+        schema:
+          type: object
+    FormSubmission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        beneficiaryId:
+          type: string
+          format: uuid
+        formType:
+          type: string
+        schemaVersion:
+          type: string
+        payload:
+          type: object
+        signedBy:
+          type: string
+          nullable: true
+        signedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreateFormSubmissionRequest:
+      type: object
+      required: [formType, schemaVersion, payload]
+      properties:
+        formType:
+          type: string
+        schemaVersion:
+          type: string
+        payload:
+          type: object
+        signedBy:
+          type: string
+          nullable: true
+        signedAt:
+          type: string
+          format: date-time
+          nullable: true
+    AnalyticsOverview:
+      type: object
+      properties:
+        scope:
+          type: string
+        totalBeneficiaries:
+          type: integer
+        activeEnrollments:
+          type: integer
+        attendanceRate:
+          type: number
+          format: float
+        generatedAt:
+          type: string
+          format: date-time
+    FeedPost:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        visibility:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+    CreateFeedPostRequest:
+      type: object
+      required: [body]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        visibility:
+          type: string
+    MessageThread:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateThreadRequest:
+      type: object
+      required: [scope]
+      properties:
+        scope:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          enum: [internal, project, private]
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        initialMessage:
+          type: object
+          properties:
+            body:
+              type: string
+            visibility:
+              type: string
+            isConfidential:
+              type: boolean
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerType:
+          type: string
+        ownerId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        mimeType:
+          type: string
+          nullable: true
+        sizeBytes:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [evolution, action_item, system_alert]
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+    Evolution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        beneficiaryId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        description:
+          type: string
+        category:
+          type: string
+          nullable: true
+        responsible:
+          type: string
+          nullable: true
+        requiresSignature:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    CreateEvolutionRequest:
+      type: object
+      required: [date, description]
+      properties:
+        date:
+          type: string
+          format: date
+        description:
+          type: string
+        category:
+          type: string
+          nullable: true
+        responsible:
+          type: string
+          nullable: true
+        requiresSignature:
+          type: boolean

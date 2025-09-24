@@ -104,7 +104,7 @@ export async function startObservability(): Promise<ObservabilityController> {
     headers,
   });
 
-  const metricReader = new PeriodicExportingMetricReader({
+  const metricReaderInstance = new PeriodicExportingMetricReader({
     exporter: metricExporter,
     exportIntervalMillis: Number(env.OTEL_METRICS_EXPORT_INTERVAL_MS),
     exportTimeoutMillis: Number(env.OTEL_METRICS_EXPORT_TIMEOUT_MS),
@@ -115,7 +115,7 @@ export async function startObservability(): Promise<ObservabilityController> {
   activeSdk = new NodeSDK({
     resource,
     traceExporter,
-    metricReader,
+    metricReader: metricReaderInstance as any,
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-http': {
@@ -125,7 +125,7 @@ export async function startObservability(): Promise<ObservabilityController> {
         },
       }),
     ],
-    traceSampler: sampler,
+    sampler,
   });
 
   try {

@@ -3,10 +3,10 @@ import '@fastify/jwt';
 
 type AuthorizationRequirement =
   | string
-  | string[]
+  | readonly string[]
   | {
-      roles?: string[];
-      permissions?: string[];
+      roles?: readonly string[];
+      permissions?: readonly string[];
       strategy?: 'any' | 'all';
     };
 

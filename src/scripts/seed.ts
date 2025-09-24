@@ -464,6 +464,387 @@ async function seedAdminUser() {
   logger.info({ email: adminEmail }, 'seeded admin user');
 }
 
+type DemoUserSeed = {
+  email: string;
+  name: string;
+  displayName: string;
+  roles: Array<{ slug: string; projectSlug?: string | null }>;
+};
+
+const DEMO_USERS: DemoUserSeed[] = [
+  {
+    email: 'coordenacao@imm.local',
+    name: 'Coordenação Demo',
+    displayName: 'Maria da Coordenação',
+    roles: [{ slug: 'coordenacao' }],
+  },
+  {
+    email: 'tecnica@imm.local',
+    name: 'Técnica Demo',
+    displayName: 'Ana Técnica',
+    roles: [{ slug: 'tecnica', projectSlug: 'demo-artesanato' }],
+  },
+  {
+    email: 'educadora@imm.local',
+    name: 'Educadora Demo',
+    displayName: 'Paula Educadora',
+    roles: [{ slug: 'educadora', projectSlug: 'demo-gastronomia' }],
+  },
+  {
+    email: 'financeiro@imm.local',
+    name: 'Financeiro Demo',
+    displayName: 'Carlos Financeiro',
+    roles: [{ slug: 'financeiro' }],
+  },
+];
+
+async function seedDemoUsers(projectMap: Map<string, string>): Promise<Map<string, string>> {
+  const defaultPasswordHash = await hash('ChangeMe123!', 12);
+  const roleSlugs = Array.from(new Set(DEMO_USERS.flatMap((user) => user.roles.map((role) => role.slug))));
+  const { rows: roleRows } = await pool.query<{ id: number; slug: string }>(
+    `select id, slug from roles where slug = any($1)` ,
+    [roleSlugs],
+  );
+
+  const roleIdMap = new Map(roleRows.map((row) => [row.slug, row.id] as const));
+  const userIdMap = new Map<string, string>();
+
+  for (const demoUser of DEMO_USERS) {
+    const emailLower = demoUser.email.toLowerCase();
+    const existing = await pool.query<{ id: string; name: string }>(
+      `select id, name from users where lower(email) = lower($1)` ,
+      [demoUser.email],
+    );
+
+    let userId = existing.rows[0]?.id;
+
+    if (!userId) {
+      const inserted = await pool.query<{ id: string }>(
+        `insert into users (id, name, email, password_hash)
+         values ($1, $2, $3, $4)
+         returning id`,
+        [randomUUID(), demoUser.name, demoUser.email, defaultPasswordHash],
+      );
+      userId = inserted.rows[0]?.id ?? null;
+    } else if (existing.rows[0]?.name !== demoUser.name) {
+      await pool.query(
+        `update users set name = $2 where id = $1`,
+        [userId, demoUser.name],
+      );
+    }
+
+    if (!userId) {
+      logger.warn({ email: demoUser.email }, 'failed to ensure demo user');
+      continue;
+    }
+
+    userIdMap.set(emailLower, userId);
+
+    await pool.query(
+      `insert into user_profiles (user_id, display_name)
+       values ($1, $2)
+       on conflict (user_id) do update set display_name = excluded.display_name`,
+      [userId, demoUser.displayName],
+    );
+
+    for (const role of demoUser.roles) {
+      const roleId = roleIdMap.get(role.slug);
+      if (!roleId) {
+        logger.warn({ role: role.slug }, 'demo role not found when seeding users');
+        continue;
+      }
+
+      const projectId = role.projectSlug ? projectMap.get(role.projectSlug) ?? null : null;
+      const existingRole = await pool.query<{ id: string; project_id: string | null }>(
+        `select id, project_id from user_roles where user_id = $1 and role_id = $2 limit 1`,
+        [userId, roleId],
+      );
+
+      if (existingRole.rowCount === 0) {
+        await pool.query(
+          `insert into user_roles (id, user_id, role_id, project_id)
+           values ($1, $2, $3, $4)`,
+          [randomUUID(), userId, roleId, projectId],
+        );
+      } else if ((existingRole.rows[0].project_id ?? null) !== (projectId ?? null)) {
+        await pool.query(
+          `update user_roles set project_id = $2 where id = $1`,
+          [existingRole.rows[0].id, projectId],
+        );
+      }
+    }
+  }
+
+  logger.info({ count: userIdMap.size }, 'seeded demo users');
+  return userIdMap;
+}
+
+async function seedDemoEvolutions(
+  beneficiaries: Array<{ id: string; full_name: string }>,
+  createdBy: string | null,
+) {
+  if (beneficiaries.length === 0) {
+    return;
+  }
+
+  const categories = ['Atendimento social', 'Acompanhamento psicológico', 'Encaminhamento'];
+  const responsibles = ['Equipe Técnica', 'Coordenação MoveONgs', 'Rede Parceira'];
+
+  for (const [index, benef] of beneficiaries.slice(0, 10).entries()) {
+    const events = [
+      {
+        description: `Atendimento inicial de ${benef.full_name.split(' ')[0] ?? 'beneficiária'} com acolhimento e definição de plano.`,
+        category: categories[index % categories.length],
+        requiresSignature: index % 2 === 0,
+      },
+      {
+        description: 'Reunião de acompanhamento mensal com atualização de metas.',
+        category: 'Acompanhamento',
+        requiresSignature: false,
+      },
+    ];
+
+    for (const [eventIndex, event] of events.entries()) {
+      const date = new Date(Date.now() - (index * 10 + eventIndex * 5) * 86_400_000);
+      await pool.query(
+        `insert into evolutions (id, beneficiary_id, date, description, category, responsible, requires_signature, created_by)
+         select $1, $2, $3, $4, $5, $6, $7, $8
+         where not exists (
+           select 1 from evolutions
+            where beneficiary_id = $2
+              and date = $3
+              and description = $4
+         )`,
+        [
+          randomUUID(),
+          benef.id,
+          date,
+          event.description,
+          event.category,
+          responsibles[(index + eventIndex) % responsibles.length],
+          event.requiresSignature,
+          createdBy,
+        ],
+      );
+    }
+  }
+
+  logger.info('seeded demo evolutions');
+}
+
+async function seedDemoFeed(
+  projectMap: Map<string, string>,
+  userIdMap: Map<string, string>,
+) {
+  const posts = [
+    {
+      title: 'Boas-vindas ao ciclo de Artesanato',
+      body: 'Esta semana retomamos as oficinas com foco em renda extra. Confiram o calendário no mural da sala 1.',
+      projectSlug: 'demo-artesanato',
+      tags: ['boas-vindas', 'artesanato'],
+      visibility: 'project',
+      authorEmail: 'tecnica@imm.local',
+      daysAgo: 7,
+      comments: [
+        { authorEmail: 'coordenacao@imm.local', body: 'Obrigada pela atualização! Equipe preparada para apoiar.' },
+        { authorEmail: 'educadora@imm.local', body: 'Participantes animadas e presentes nas primeiras aulas.' },
+      ],
+    },
+    {
+      title: 'Agenda Gastronômica da Semana',
+      body: 'Teremos aula prática de panificação social na quarta-feira. Levem avental e recipiente para levar as produções.',
+      projectSlug: 'demo-gastronomia',
+      tags: ['agenda', 'gastronomia'],
+      visibility: 'project',
+      authorEmail: 'educadora@imm.local',
+      daysAgo: 4,
+      comments: [
+        { authorEmail: 'coordenacao@imm.local', body: 'Vamos registrar imagens para o relatório mensal.' },
+      ],
+    },
+    {
+      title: 'Comunicado geral de segurança',
+      body: 'Reforçamos que todas as visitas externas devem assinar o termo LGPD e usar crachá identificado.',
+      projectSlug: null,
+      tags: ['comunicado', 'lgpd'],
+      visibility: 'internal',
+      authorEmail: 'coordenacao@imm.local',
+      daysAgo: 2,
+      comments: [
+        { authorEmail: 'financeiro@imm.local', body: 'Portaria já avisada, alinharemos com voluntariado.' },
+      ],
+    },
+  ];
+
+  for (const post of posts) {
+    const authorId = userIdMap.get(post.authorEmail);
+    if (!authorId) {
+      logger.warn({ authorEmail: post.authorEmail }, 'demo post skipped: author missing');
+      continue;
+    }
+
+    const projectId = post.projectSlug ? projectMap.get(post.projectSlug) ?? null : null;
+    const publishedAt = new Date(Date.now() - post.daysAgo * 86_400_000);
+    const postId = randomUUID();
+
+    const inserted = await pool.query<{ id: string }>(
+      `insert into posts (id, project_id, author_id, title, body, tags, visibility, published_at)
+       select $1, $2, $3, $4, $5, $6, $7, $8
+       where not exists (select 1 from posts where author_id = $3 and title = $4)
+       returning id`,
+      [postId, projectId, authorId, post.title, post.body, post.tags, post.visibility, publishedAt],
+    );
+
+    const effectivePostId = inserted.rows[0]?.id
+      ?? (await pool.query<{ id: string }>(
+        `select id from posts where author_id = $1 and title = $2 limit 1`,
+        [authorId, post.title],
+      )).rows[0]?.id;
+
+    if (!effectivePostId) {
+      continue;
+    }
+
+    for (const comment of post.comments) {
+      const commenterId = userIdMap.get(comment.authorEmail);
+      if (!commenterId) {
+        continue;
+      }
+
+      await pool.query(
+        `insert into comments (id, post_id, author_id, body)
+         select $1, $2, $3, $4
+         where not exists (
+           select 1 from comments where post_id = $2 and author_id = $3 and body = $4
+         )`,
+        [randomUUID(), effectivePostId, commenterId, comment.body],
+      );
+    }
+  }
+
+  logger.info('seeded demo feed posts');
+}
+
+async function seedDemoMessages(
+  projectMap: Map<string, string>,
+  userIdMap: Map<string, string>,
+) {
+  const threads = [
+    {
+      scope: projectMap.get('demo-artesanato') ?? 'demo-artesanato',
+      subject: 'Acompanhamento Artesanato - Março',
+      visibility: 'project',
+      createdBy: 'tecnica@imm.local',
+      memberEmails: ['coordenacao@imm.local', 'educadora@imm.local'],
+      messages: [
+        {
+          authorEmail: 'tecnica@imm.local',
+          body: 'Equipe, registramos evolução de 80% das participantes com presença completa nas duas últimas oficinas.',
+          visibility: 'project',
+          isConfidential: false,
+        },
+        {
+          authorEmail: 'coordenacao@imm.local',
+          body: 'Excelente! Vamos preparar material para apresentação ao conselho.',
+          visibility: 'project',
+          isConfidential: false,
+        },
+      ],
+    },
+    {
+      scope: 'comite-lgpd',
+      subject: 'Checklist LGPD mensal',
+      visibility: 'internal',
+      createdBy: 'coordenacao@imm.local',
+      memberEmails: ['financeiro@imm.local', 'tecnica@imm.local'],
+      messages: [
+        {
+          authorEmail: 'coordenacao@imm.local',
+          body: 'Favor revisar consentimentos pendentes antes do relatório trimestral.',
+          visibility: 'internal',
+          isConfidential: false,
+        },
+        {
+          authorEmail: 'financeiro@imm.local',
+          body: 'Planilha consolidada anexada. Apenas 3 casos aguardando atualização.',
+          visibility: 'internal',
+          isConfidential: true,
+        },
+      ],
+    },
+  ];
+
+  for (const thread of threads) {
+    const creatorId = userIdMap.get(thread.createdBy);
+    if (!creatorId) {
+      logger.warn({ createdBy: thread.createdBy }, 'demo thread skipped: creator missing');
+      continue;
+    }
+
+    const threadId = randomUUID();
+    const inserted = await pool.query<{ id: string }>(
+      `insert into threads (id, scope, created_by, subject, visibility)
+       select $1, $2, $3, $4, $5
+       where not exists (select 1 from threads where scope = $2 and subject = $4)
+       returning id`,
+      [threadId, thread.scope, creatorId, thread.subject, thread.visibility],
+    );
+
+    const effectiveThreadId = inserted.rows[0]?.id
+      ?? (await pool.query<{ id: string }>(
+        `select id from threads where scope = $1 and subject = $2 limit 1`,
+        [thread.scope, thread.subject],
+      )).rows[0]?.id;
+
+    if (!effectiveThreadId) {
+      continue;
+    }
+
+    const memberIds = new Set<string>();
+    memberIds.add(creatorId);
+    for (const email of thread.memberEmails) {
+      const memberId = userIdMap.get(email);
+      if (memberId) {
+        memberIds.add(memberId);
+      }
+    }
+
+    for (const memberId of memberIds) {
+      await pool.query(
+        `insert into thread_members (thread_id, user_id)
+         values ($1, $2)
+         on conflict do nothing`,
+        [effectiveThreadId, memberId],
+      );
+    }
+
+    for (const message of thread.messages) {
+      const authorId = userIdMap.get(message.authorEmail);
+      if (!authorId) {
+        continue;
+      }
+
+      await pool.query(
+        `insert into messages (id, thread_id, author_id, body, visibility, is_confidential)
+         select $1, $2, $3, $4, $5, $6
+         where not exists (
+           select 1 from messages where thread_id = $2 and author_id = $3 and body = $4
+         )`,
+        [
+          randomUUID(),
+          effectiveThreadId,
+          authorId,
+          message.body,
+          message.visibility ?? thread.visibility,
+          message.isConfidential ?? false,
+        ],
+      );
+    }
+  }
+
+  logger.info('seeded demo message threads');
+}
+
 async function seedFormTemplates() {
   const baseDir = path.join(__dirname, '../../artifacts/json_schemas');
 
@@ -562,12 +943,12 @@ async function seedDemoData() {
     [demoSlugs],
   );
 
-  if (existing.length === demoSlugs.length) {
-    logger.info('Demo analytics data already seeded; skipping');
-    return;
+  const hasAllProjects = existing.length === demoSlugs.length;
+  if (hasAllProjects) {
+    logger.info('Demo projects already present; refreshing demo fixtures');
+  } else {
+    logger.info('Seeding demo analytics dataset');
   }
-
-  logger.info('Seeding demo analytics dataset');
 
   const projects = await pool.query<{ id: string; slug: string }>(
     `insert into projects (name, slug, description, active)
@@ -579,6 +960,7 @@ async function seedDemoData() {
   );
 
   const projectMap = new Map(projects.rows.map((row) => [row.slug, row.id] as const));
+  const demoUserIds = await seedDemoUsers(projectMap);
 
   const cohortRows = await pool.query<{ id: string }>(
     `insert into cohorts (project_id, code, weekday, shift, start_time, end_time, capacity, location)
@@ -622,6 +1004,11 @@ async function seedDemoData() {
   const { rows: beneficiaries } = await pool.query<{ id: string; full_name: string }>(
     `select id, full_name from beneficiaries where full_name like 'Demo Beneficiaria %'`,
   );
+
+  const evolutionAuthor = demoUserIds.get('tecnica@imm.local')
+    ?? demoUserIds.get('coordenacao@imm.local')
+    ?? null;
+  await seedDemoEvolutions(beneficiaries, evolutionAuthor);
 
   const enrollmentRows: Array<{ beneficiary_id: string; cohort_id: string; status: string; enrolled_at: string; terminated_at: string | null }> = [];
   const startDate = Date.now() - 90 * 86_400_000;
@@ -702,7 +1089,10 @@ async function seedDemoData() {
   }
 
   const { rows: users } = await pool.query<{ id: string }>(`select id from users order by created_at asc limit 1`);
-  const createdBy = users[0]?.id ?? null;
+  const createdBy = demoUserIds.get('tecnica@imm.local')
+    ?? demoUserIds.get('coordenacao@imm.local')
+    ?? users[0]?.id
+    ?? null;
 
   if (createdBy) {
     const planTargets = beneficiaries.slice(0, 12);
@@ -727,6 +1117,9 @@ async function seedDemoData() {
       }
     }
   }
+
+  await seedDemoFeed(projectMap, demoUserIds);
+  await seedDemoMessages(projectMap, demoUserIds);
 
   logger.info('Demo dataset ready');
 }

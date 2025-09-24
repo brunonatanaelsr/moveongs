@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import { query } from '../../db';
 
 export type PasswordResetTokenRecord = {
@@ -28,7 +28,7 @@ function mapRow(row: {
   };
 }
 
-async function execute<T>(
+async function execute<T extends QueryResultRow>(
   sql: string,
   values: unknown[],
   client?: PoolClient,

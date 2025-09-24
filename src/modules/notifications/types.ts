@@ -16,7 +16,6 @@ export type EnrollmentCreatedEvent = NotificationEventBase & {
     status: string;
     enrolledAt: string;
   };
-  };
 };
 
 export type AttendanceRecordedEvent = NotificationEventBase & {
@@ -27,7 +26,6 @@ export type AttendanceRecordedEvent = NotificationEventBase & {
     date: string;
     present: boolean;
     justification: string | null;
-  };
   };
 };
 
@@ -46,7 +44,6 @@ export type AttendanceLowAttendanceEvent = NotificationEventBase & {
     totalSessions: number;
     presentSessions: number;
   };
-  };
 };
 
 export type ConsentRecordedEvent = NotificationEventBase & {
@@ -60,7 +57,6 @@ export type ConsentRecordedEvent = NotificationEventBase & {
     grantedAt: string;
     revokedAt: string | null;
   };
-  };
 };
 
 export type ConsentUpdatedEvent = NotificationEventBase & {
@@ -73,7 +69,6 @@ export type ConsentUpdatedEvent = NotificationEventBase & {
     granted: boolean;
     grantedAt: string;
     revokedAt: string | null;
-  };
   };
 };
 
@@ -90,7 +85,6 @@ export type ActionItemDueSoonEvent = NotificationEventBase & {
     status: string;
     dueInDays: number;
   };
-  };
 };
 
 export type ActionItemOverdueEvent = NotificationEventBase & {
@@ -105,7 +99,6 @@ export type ActionItemOverdueEvent = NotificationEventBase & {
     responsible: string | null;
     status: string;
     overdueByDays: number;
-  };
   };
 };
 
