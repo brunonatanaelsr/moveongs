@@ -8,6 +8,7 @@ Este backlog converte as necessidades legais e operacionais em stories acionáve
 - **Dependências:** utilize os IDs (ex.: `SEC-04`) para vincular stories relacionadas.
 - **DoD padrão:** testes automatizados, observabilidade, revisão de segurança, documentação atualizada, migrações versionadas/rollback, demo validada.
 
+
 ---
 
 ## EPIC 1 — LGPD & Segurança de Dados (Prioridade legal)
