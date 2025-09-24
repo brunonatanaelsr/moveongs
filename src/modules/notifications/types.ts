@@ -72,12 +72,46 @@ export type ConsentUpdatedEvent = {
   };
 };
 
+export type ActionItemDueSoonEvent = {
+  type: 'action_item.due_soon';
+  triggeredAt?: string;
+  data: {
+    actionPlanId: string;
+    actionItemId: string;
+    beneficiaryId: string;
+    beneficiaryName: string | null;
+    title: string;
+    dueDate: string;
+    responsible: string | null;
+    status: string;
+    dueInDays: number;
+  };
+};
+
+export type ActionItemOverdueEvent = {
+  type: 'action_item.overdue';
+  triggeredAt?: string;
+  data: {
+    actionPlanId: string;
+    actionItemId: string;
+    beneficiaryId: string;
+    beneficiaryName: string | null;
+    title: string;
+    dueDate: string;
+    responsible: string | null;
+    status: string;
+    overdueByDays: number;
+  };
+};
+
 export type NotificationEvent =
   | EnrollmentCreatedEvent
   | AttendanceRecordedEvent
   | AttendanceLowAttendanceEvent
   | ConsentRecordedEvent
-  | ConsentUpdatedEvent;
+  | ConsentUpdatedEvent
+  | ActionItemDueSoonEvent
+  | ActionItemOverdueEvent;
 
 export type NotificationChannel = 'email' | 'whatsapp' | 'webhook';
 

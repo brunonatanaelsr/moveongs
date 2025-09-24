@@ -25,6 +25,11 @@ export type ActionPlanRecord = {
   items: ActionItemRecord[];
 };
 
+export type ActionItemReminderRecord = ActionItemRecord & {
+  beneficiaryId: string;
+  beneficiaryName: string | null;
+};
+
 function mapActionPlan(row: any, items: ActionItemRecord[] = []): ActionPlanRecord {
   return {
     id: row.id,
@@ -332,4 +337,52 @@ export async function listActionItemsForBeneficiary(params: {
   );
 
   return rows.map(mapActionItem);
+}
+
+export async function listActionItemsDueBefore(params: { maxDueDate: Date }): Promise<ActionItemReminderRecord[]> {
+  const threshold = new Date(Date.UTC(
+    params.maxDueDate.getUTCFullYear(),
+    params.maxDueDate.getUTCMonth(),
+    params.maxDueDate.getUTCDate(),
+  ));
+
+  const thresholdDate = threshold.toISOString().slice(0, 10);
+
+  const { rows } = await query<{
+    beneficiary_id: string;
+    beneficiary_name: string | null;
+  } & Record<string, unknown>>(
+    `select ai.*, ap.beneficiary_id, b.full_name as beneficiary_name
+       from action_items ai
+       join action_plans ap on ap.id = ai.action_plan_id
+       left join beneficiaries b on b.id = ap.beneficiary_id
+      where ai.due_date is not null
+        and ai.completed_at is null
+        and lower(coalesce(ai.status, '')) <> 'done'
+        and ai.due_date <= $1::date
+      order by ai.due_date asc`,
+    [thresholdDate],
+  );
+
+  return rows.map((row) => {
+    const item = mapActionItem(row);
+    return {
+      ...item,
+      beneficiaryId: row.beneficiary_id,
+      beneficiaryName: row.beneficiary_name ?? null,
+    } satisfies ActionItemReminderRecord;
+  });
+}
+
+export async function getBeneficiaryNameById(beneficiaryId: string): Promise<string | null> {
+  const { rows } = await query<{ full_name: string | null }>(
+    'select full_name from beneficiaries where id = $1',
+    [beneficiaryId],
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return rows[0].full_name ?? null;
 }

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { recordAuditLog } from '../../shared/audit';
 import { AppError } from '../../shared/errors';
 import {
@@ -11,7 +12,134 @@ import {
   listActionPlans,
   updateActionItem as updateActionItemRepository,
   updateActionPlan as updateActionPlanRepository,
+  listActionItemsDueBefore,
+  getBeneficiaryNameById,
 } from './repository';
+import { publishNotificationEvent } from '../notifications/service';
+
+const MS_PER_DAY = 86_400_000;
+const ACTION_ITEM_DUE_SOON_THRESHOLD_DAYS = 3;
+const ACTION_ITEM_REMINDER_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+type BeneficiaryNameCache = Map<string, string | null>;
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function parseDateOnly(value: string): Date | null {
+  const parts = value.split('-').map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+  const [year, month, day] = parts;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
+async function getBeneficiaryDisplayName(params: {
+  beneficiaryId: string;
+  explicitName?: string | null;
+  cache: BeneficiaryNameCache;
+}): Promise<string | null> {
+  if (params.explicitName !== undefined) {
+    params.cache.set(params.beneficiaryId, params.explicitName ?? null);
+    return params.explicitName ?? null;
+  }
+
+  if (params.cache.has(params.beneficiaryId)) {
+    return params.cache.get(params.beneficiaryId) ?? null;
+  }
+
+  const name = await getBeneficiaryNameById(params.beneficiaryId);
+  params.cache.set(params.beneficiaryId, name ?? null);
+  return name ?? null;
+}
+
+async function evaluateAndPublishActionItemReminder(params: {
+  actionPlanId: string;
+  beneficiaryId: string;
+  beneficiaryName?: string | null;
+  item: ActionItemRecord;
+  now?: Date;
+  cache?: BeneficiaryNameCache;
+}): Promise<void> {
+  if (!params.item.dueDate) {
+    return;
+  }
+
+  if (params.item.completedAt) {
+    return;
+  }
+
+  const status = params.item.status?.toLowerCase?.() ?? '';
+  if (status === 'done' || status === 'completed') {
+    return;
+  }
+
+  const dueDate = parseDateOnly(params.item.dueDate);
+  if (!dueDate) {
+    return;
+  }
+
+  const now = params.now ?? new Date();
+  const referenceDate = startOfUtcDay(now);
+  const diffDays = Math.round((dueDate.getTime() - referenceDate.getTime()) / MS_PER_DAY);
+
+  if (diffDays < 0) {
+    const cache = params.cache ?? new Map<string, string | null>();
+    const beneficiaryName = await getBeneficiaryDisplayName({
+      beneficiaryId: params.beneficiaryId,
+      explicitName: params.beneficiaryName,
+      cache,
+    });
+
+    publishNotificationEvent({
+      type: 'action_item.overdue',
+      data: {
+        actionPlanId: params.actionPlanId,
+        actionItemId: params.item.id,
+        beneficiaryId: params.beneficiaryId,
+        beneficiaryName,
+        title: params.item.title,
+        dueDate: params.item.dueDate,
+        responsible: params.item.responsible,
+        status: params.item.status,
+        overdueByDays: Math.abs(diffDays),
+      },
+    });
+    return;
+  }
+
+  if (diffDays <= ACTION_ITEM_DUE_SOON_THRESHOLD_DAYS) {
+    const cache = params.cache ?? new Map<string, string | null>();
+    const beneficiaryName = await getBeneficiaryDisplayName({
+      beneficiaryId: params.beneficiaryId,
+      explicitName: params.beneficiaryName,
+      cache,
+    });
+
+    publishNotificationEvent({
+      type: 'action_item.due_soon',
+      data: {
+        actionPlanId: params.actionPlanId,
+        actionItemId: params.item.id,
+        beneficiaryId: params.beneficiaryId,
+        beneficiaryName,
+        title: params.item.title,
+        dueDate: params.item.dueDate,
+        responsible: params.item.responsible,
+        status: params.item.status,
+        dueInDays: diffDays,
+      },
+    });
+  }
+}
+
+let reminderInterval: NodeJS.Timeout | null = null;
 
 export async function createActionPlan(params: {
   beneficiaryId: string;
@@ -112,6 +240,15 @@ export async function addActionItem(params: {
     afterData: plan,
   });
 
+  const createdItem = plan.items[plan.items.length - 1];
+  if (createdItem) {
+    await evaluateAndPublishActionItemReminder({
+      actionPlanId: plan.id,
+      beneficiaryId: plan.beneficiaryId,
+      item: createdItem,
+    });
+  }
+
   return plan;
 }
 
@@ -154,14 +291,24 @@ export async function updateActionItem(params: {
     completedAt: completedAt ?? null,
   });
 
+  const updatedItem = plan.items.find((item) => item.id === params.itemId) ?? null;
+
   await recordAuditLog({
     userId: params.userId ?? null,
     entity: 'action_plan',
     entityId: plan.id,
     action: 'update_item',
     beforeData: itemBefore,
-    afterData: plan.items.find((item) => item.id === params.itemId) ?? null,
+    afterData: updatedItem,
   });
+
+  if (updatedItem) {
+    await evaluateAndPublishActionItemReminder({
+      actionPlanId: plan.id,
+      beneficiaryId: plan.beneficiaryId,
+      item: updatedItem,
+    });
+  }
 
   return plan;
 }
@@ -178,4 +325,54 @@ export async function listActionItemsSummary(params: {
     status: params.status,
     dueBefore: dueBefore && !Number.isNaN(dueBefore.getTime()) ? dueBefore : undefined,
   });
+}
+
+export async function runActionItemReminderScan(now: Date = new Date()): Promise<void> {
+  const referenceDate = startOfUtcDay(now);
+  const maxDueDate = new Date(referenceDate.getTime() + ACTION_ITEM_DUE_SOON_THRESHOLD_DAYS * MS_PER_DAY);
+  const cache: BeneficiaryNameCache = new Map();
+
+  const items = await listActionItemsDueBefore({ maxDueDate });
+
+  for (const item of items) {
+    await evaluateAndPublishActionItemReminder({
+      actionPlanId: item.actionPlanId,
+      beneficiaryId: item.beneficiaryId,
+      beneficiaryName: item.beneficiaryName,
+      item,
+      now,
+      cache,
+    });
+  }
+}
+
+export function startActionItemReminderJob(options?: { intervalMs?: number; nowProvider?: () => Date }): void {
+  const intervalMs = options?.intervalMs && options.intervalMs > 0
+    ? options.intervalMs
+    : ACTION_ITEM_REMINDER_INTERVAL_MS;
+  const nowProvider = options?.nowProvider ?? (() => new Date());
+
+  const execute = async () => {
+    try {
+      await runActionItemReminderScan(nowProvider());
+    } catch (error) {
+      logger.error({ err: error }, 'Action item reminder scan failed');
+    }
+  };
+
+  if (reminderInterval) {
+    clearInterval(reminderInterval);
+  }
+
+  void execute();
+  reminderInterval = setInterval(() => {
+    void execute();
+  }, intervalMs);
+}
+
+export function stopActionItemReminderJob(): void {
+  if (reminderInterval) {
+    clearInterval(reminderInterval);
+    reminderInterval = null;
+  }
 }

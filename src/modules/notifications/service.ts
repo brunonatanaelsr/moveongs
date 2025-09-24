@@ -243,6 +243,40 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): { subject: st
           event.data.revokedAt ? `Revogado em: ${event.data.revokedAt}` : null,
         ].filter(Boolean).join('\n'),
       };
+    case 'action_item.due_soon': {
+      const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
+      const dueText = event.data.dueInDays <= 0
+        ? 'vence hoje'
+        : `vence em ${event.data.dueInDays} dia(s)`;
+      return {
+        subject: `Ação próxima do prazo - ${event.data.title}`,
+        body: [
+          `Ação "${event.data.title}" ${dueText}.`,
+          `Beneficiário(a): ${beneficiary}`,
+          `Plano de ação: ${event.data.actionPlanId}`,
+          `Data limite: ${event.data.dueDate}`,
+          event.data.responsible ? `Responsável: ${event.data.responsible}` : null,
+          `Status atual: ${event.data.status}`,
+        ].filter(Boolean).join('\n'),
+      };
+    }
+    case 'action_item.overdue': {
+      const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
+      const overdueText = event.data.overdueByDays <= 1
+        ? '1 dia'
+        : `${event.data.overdueByDays} dias`;
+      return {
+        subject: `Ação em atraso - ${event.data.title}`,
+        body: [
+          `Ação "${event.data.title}" atrasada há ${overdueText}.`,
+          `Beneficiário(a): ${beneficiary}`,
+          `Plano de ação: ${event.data.actionPlanId}`,
+          `Data limite: ${event.data.dueDate}`,
+          event.data.responsible ? `Responsável: ${event.data.responsible}` : null,
+          `Status atual: ${event.data.status}`,
+        ].filter(Boolean).join('\n'),
+      };
+    }
     default:
       return null;
   }
@@ -263,6 +297,20 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
       return `Consentimento ${event.data.type} registrado para beneficiário ${event.data.beneficiaryId}.`;
     case 'consent.updated':
       return `Consentimento ${event.data.type} atualizado (${event.data.granted ? 'ativo' : 'revogado'}).`;
+    case 'action_item.due_soon': {
+      const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
+      const dueText = event.data.dueInDays <= 0
+        ? 'vence hoje'
+        : `vence em ${event.data.dueInDays} dia(s)`;
+      return `Lembrete: ação "${event.data.title}" ${dueText} (beneficiário ${beneficiary}).`;
+    }
+    case 'action_item.overdue': {
+      const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
+      const overdueText = event.data.overdueByDays <= 1
+        ? '1 dia'
+        : `${event.data.overdueByDays} dias`;
+      return `Alerta: ação "${event.data.title}" atrasada há ${overdueText} (beneficiário ${beneficiary}).`;
+    }
     default:
       return null;
   }
