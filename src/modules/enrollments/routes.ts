@@ -33,9 +33,14 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const enrollment = await createEnrollment({
       ...parsedBody.data,
       agreementAcceptance: parsedBody.data.agreementAcceptance ?? null,
+      allowedProjectIds,
     });
 
     return reply.code(201).send({ enrollment });
@@ -49,7 +54,14 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid query', 400, parsedQuery.error.flatten());
     }
 
-    const data = await listEnrollments(parsedQuery.data);
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
+    const data = await listEnrollments({
+      ...parsedQuery.data,
+      allowedProjectIds,
+    });
 
     return {
       data,
@@ -74,7 +86,11 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
-    const enrollment = await updateEnrollment(parsedParams.data.id, parsedBody.data);
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
+    const enrollment = await updateEnrollment(parsedParams.data.id, { ...parsedBody.data, allowedProjectIds });
     return { enrollment };
   });
 
@@ -91,12 +107,17 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const result = await recordAttendance({
       enrollmentId: parsedParams.data.id,
       date: parsedBody.data.date,
       present: parsedBody.data.present,
       justification: parsedBody.data.justification ?? null,
       recordedBy: request.user?.sub,
+      allowedProjectIds,
     });
 
     return reply.code(201).send(result);
@@ -115,10 +136,15 @@ export const enrollmentRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid query', 400, parsedQuery.error.flatten());
     }
 
+    const allowedProjectIds = request.user.projectScopes && request.user.projectScopes.length > 0
+      ? request.user.projectScopes
+      : null;
+
     const attendance = await getAttendance({
       enrollmentId: parsedParams.data.id,
       startDate: parsedQuery.data.startDate,
       endDate: parsedQuery.data.endDate,
+      allowedProjectIds,
     });
 
     return { data: attendance };

@@ -38,6 +38,20 @@ export async function registerAuthDecorators(app: FastifyInstance) {
     if (!shouldAllow) {
       throw new ForbiddenError('Insufficient permissions');
     }
+
+    const requiredProjectPermissions = permissions.filter((permission) => permission.endsWith(':project'));
+    if (requiredProjectPermissions.length > 0) {
+      const userProjectPermissions = requiredProjectPermissions.filter((permission) => userPermissions.has(permission));
+      if (userProjectPermissions.length > 0) {
+        const projectScopes = Array.isArray(request.user?.projectScopes) ? request.user?.projectScopes ?? [] : [];
+        const hasGlobalRole = Array.isArray(request.user?.roles)
+          ? request.user.roles.some((role) => role === 'admin')
+          : false;
+        if (!hasGlobalRole && projectScopes.length === 0) {
+          throw new ForbiddenError('Project scope required');
+        }
+      }
+    }
   });
 }
 

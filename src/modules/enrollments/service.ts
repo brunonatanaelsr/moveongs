@@ -1,4 +1,4 @@
-import { AppError } from '../../shared/errors';
+import { AppError, ForbiddenError } from '../../shared/errors';
 import {
   AttendanceRecord,
   EnrollmentRecord,
@@ -39,8 +39,14 @@ export async function createEnrollment(input: {
   enrolledAt?: string;
   status?: string;
   agreementAcceptance?: Record<string, unknown> | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord> {
-  const enrollment = await createEnrollmentRepository(input);
+  const { allowedProjectIds, ...payload } = input;
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  const enrollment = await createEnrollmentRepository({
+    ...payload,
+    allowedProjectIds: scopes,
+  });
 
   publishNotificationEvent({
     type: 'enrollment.created',
@@ -64,8 +70,11 @@ export async function updateEnrollment(id: string, input: {
   status?: string;
   terminatedAt?: string;
   terminationReason?: string | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord> {
-  return updateEnrollmentRepository(id, input);
+  const { allowedProjectIds, ...payload } = input;
+  const scopes = allowedProjectIds && allowedProjectIds.length > 0 ? allowedProjectIds : null;
+  return updateEnrollmentRepository(id, { ...payload, allowedProjectIds: scopes });
 }
 
 export async function listEnrollments(params: {
@@ -76,6 +85,7 @@ export async function listEnrollments(params: {
   activeOnly?: boolean;
   limit?: number;
   offset?: number;
+  allowedProjectIds?: string[] | null;
 }): Promise<EnrollmentRecord[]> {
   const limit = Math.min(params.limit ?? 50, 200);
   const offset = params.offset ?? 0;
@@ -88,6 +98,12 @@ export async function listEnrollments(params: {
     throw new AppError('offset cannot be negative', 400);
   }
 
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+
+  if (scopes && params.projectId && !scopes.includes(params.projectId)) {
+    throw new ForbiddenError('Project access denied');
+  }
+
   return listEnrollmentsRepository({
     beneficiaryId: params.beneficiaryId,
     cohortId: params.cohortId,
@@ -96,6 +112,7 @@ export async function listEnrollments(params: {
     activeOnly: params.activeOnly,
     limit,
     offset,
+    allowedProjectIds: scopes,
   });
 }
 
@@ -105,6 +122,7 @@ export async function recordAttendance(input: {
   present: boolean;
   justification?: string | null;
   recordedBy?: string | null;
+  allowedProjectIds?: string[] | null;
 }): Promise<RecordAttendanceResult> {
   const trimmedJustification =
     typeof input.justification === 'string' ? input.justification.trim() : null;
@@ -116,7 +134,8 @@ export async function recordAttendance(input: {
     throw new AppError('Justification is required when marking an absence');
   }
 
-  const enrollment = await getEnrollmentById(input.enrollmentId);
+  const scopes = input.allowedProjectIds && input.allowedProjectIds.length > 0 ? input.allowedProjectIds : null;
+  const enrollment = await getEnrollmentById(input.enrollmentId, scopes);
   if (!enrollment) {
     throw new AppError('Enrollment not found', 404);
   }
@@ -131,6 +150,7 @@ export async function recordAttendance(input: {
     present: input.present,
     justification: normalizedJustification,
     recordedBy: input.recordedBy,
+    allowedProjectIds: scopes,
   });
 
   publishNotificationEvent({
@@ -144,7 +164,7 @@ export async function recordAttendance(input: {
     },
   });
 
-  const updatedEnrollment = await getEnrollmentById(attendance.enrollmentId);
+  const updatedEnrollment = await getEnrollmentById(attendance.enrollmentId, scopes);
   if (!updatedEnrollment) {
     throw new AppError('Failed to load enrollment after recording attendance', 500);
   }
@@ -189,6 +209,13 @@ export async function getAttendance(params: {
   enrollmentId: string;
   startDate?: string;
   endDate?: string;
+  allowedProjectIds?: string[] | null;
 }): Promise<AttendanceRecord[]> {
-  return listAttendance(params);
+  const scopes = params.allowedProjectIds && params.allowedProjectIds.length > 0 ? params.allowedProjectIds : null;
+  return listAttendance({
+    enrollmentId: params.enrollmentId,
+    startDate: params.startDate,
+    endDate: params.endDate,
+    allowedProjectIds: scopes,
+  });
 }
