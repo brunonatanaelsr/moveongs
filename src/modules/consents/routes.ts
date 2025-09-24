@@ -6,8 +6,15 @@ import {
   createConsentBodySchema,
   listConsentQuerySchema,
   updateConsentBodySchema,
+  completeConsentReviewBodySchema,
 } from './schemas';
-import { getConsentOrFail, listConsents, registerConsent, updateExistingConsent } from './service';
+import {
+  getConsentOrFail,
+  listConsents,
+  registerConsent,
+  updateExistingConsent,
+  completeConsentReview,
+} from './service';
 
 const READ_REQUIREMENTS = {
   roles: ['admin', 'coordenacao', 'tecnica', 'recepcao', 'financeiro', 'voluntaria', 'leitura_externa'],
@@ -106,5 +113,26 @@ export const consentRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { consent };
+  });
+
+  app.post('/consents/:id/reviews/complete', {
+    preHandler: [app.authenticate, app.authorize(UPDATE_REQUIREMENTS)],
+  }, async (request, reply) => {
+    const params = consentIdParamSchema.safeParse(request.params);
+    if (!params.success) {
+      throw new AppError('Invalid params', 400, params.error.flatten());
+    }
+
+    const body = completeConsentReviewBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      throw new AppError('Invalid body', 400, body.error.flatten());
+    }
+
+    await completeConsentReview(params.data.id, {
+      reviewedAt: body.data.reviewedAt,
+      userId: request.user?.sub ?? null,
+    });
+
+    return reply.code(204).send();
   });
 };

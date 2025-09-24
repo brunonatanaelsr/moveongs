@@ -47,7 +47,9 @@ import {
   registerConsent,
   listConsents,
   updateExistingConsent,
+  triggerConsentReviewNotifications,
 } from '../../src/modules/consents/service';
+import * as notificationService from '../../src/modules/notifications/service';
 import { fetchAuditLogs } from '../../src/modules/audit/service';
 import {
   uploadAttachment,
@@ -75,6 +77,7 @@ async function loadSchema() {
   const files = [
     path.join(__dirname, '../../artifacts/sql/0001_initial.sql'),
     path.join(__dirname, '../../artifacts/sql/0002_rbac_and_profiles.sql'),
+    path.join(__dirname, '../../artifacts/sql/0006_mfa_consent_reviews_dsr.sql'),
   ];
 
   for (const sqlPath of files) {
@@ -125,11 +128,13 @@ describe('LGPD modules', () => {
     const beneficiaryId = await createBeneficiary();
     const userId = await getAdminUserId();
 
+    const grantedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
     const consent = await registerConsent({
       beneficiaryId,
       type: 'lgpd',
       textVersion: 'v1',
       granted: true,
+      grantedAt,
       evidence: { channel: 'tablet' },
       userId,
     });
@@ -140,6 +145,19 @@ describe('LGPD modules', () => {
       textVersion: 'v1',
       granted: true,
     });
+
+    const schedule = await pool.query(
+      'select * from consent_review_schedules where consent_id = $1',
+      [consent.id],
+    );
+    expect(schedule.rowCount).toBe(1);
+    expect(schedule.rows[0].is_active).toBe(true);
+
+    const publishSpy = vi.spyOn(notificationService, 'publishNotificationEvent').mockImplementation(() => {});
+    const due = await triggerConsentReviewNotifications(new Date());
+    publishSpy.mockRestore();
+
+    expect(due).toEqual(expect.arrayContaining([expect.objectContaining({ consentId: consent.id })]));
 
     const consents = await listConsents({ beneficiaryId });
     expect(consents).toHaveLength(1);
@@ -152,6 +170,12 @@ describe('LGPD modules', () => {
 
     expect(revoked.granted).toBe(false);
     expect(revoked.revokedAt).not.toBeNull();
+
+    const disabledSchedule = await pool.query(
+      'select * from consent_review_schedules where consent_id = $1',
+      [consent.id],
+    );
+    expect(disabledSchedule.rows[0]?.is_active).toBe(false);
 
     const auditEntries = await fetchAuditLogs({ entity: 'consent', entityId: consent.id });
 

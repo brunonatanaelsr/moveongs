@@ -19,6 +19,8 @@ import { actionPlanRoutes } from './action-plans/routes';
 import { timelineRoutes } from './timeline/routes';
 import { feedRoutes } from './feed/routes';
 import { messageRoutes } from './messages/routes';
+import { mfaRoutes } from './mfa/routes';
+import { dsrRoutes } from './dsr/routes';
 
 
 export async function registerModules(app: FastifyInstance) {
@@ -26,6 +28,8 @@ export async function registerModules(app: FastifyInstance) {
 
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(mfaRoutes);
+  await app.register(dsrRoutes);
   await app.register(userRoutes);
   await app.register(projectRoutes);
   await app.register(enrollmentRoutes);

@@ -34,3 +34,7 @@ export const consentIdParamSchema = z.object({
 export type CreateConsentBody = z.infer<typeof createConsentBodySchema>;
 export type UpdateConsentBody = z.infer<typeof updateConsentBodySchema>;
 export type ListConsentQuery = z.infer<typeof listConsentQuerySchema>;
+
+export const completeConsentReviewBodySchema = z.object({
+  reviewedAt: isoDateTime.optional(),
+});

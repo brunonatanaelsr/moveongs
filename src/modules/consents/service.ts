@@ -8,6 +8,12 @@ import {
   updateConsent,
 } from './repository';
 import { publishNotificationEvent } from '../notifications/service';
+import {
+  scheduleConsentReview,
+  disableConsentReview,
+  markConsentReviewCompleted as markConsentReviewCompletedSchedule,
+  triggerConsentReviewNotifications,
+} from './review-service';
 
 export async function listConsents(params: {
   beneficiaryId: string;
@@ -64,6 +70,12 @@ export async function registerConsent(params: {
       revokedAt: consent.revokedAt,
     },
   });
+
+  if (consent.granted && !consent.revokedAt) {
+    await scheduleConsentReview(consent.id, consent.grantedAt);
+  } else {
+    await disableConsentReview(consent.id);
+  }
 
   return consent;
 }
@@ -144,6 +156,12 @@ export async function updateExistingConsent(id: string, params: {
     },
   });
 
+  if (updated.granted && !updated.revokedAt) {
+    await scheduleConsentReview(updated.id, updated.grantedAt);
+  } else {
+    await disableConsentReview(updated.id);
+  }
+
   return updated;
 }
 
@@ -155,3 +173,12 @@ export async function getConsentOrFail(id: string): Promise<ConsentRecord> {
 
   return consent;
 }
+
+export async function completeConsentReview(consentId: string, params: { reviewedAt?: string; userId?: string | null }) {
+  await markConsentReviewCompletedSchedule(consentId, {
+    reviewedAt: params.reviewedAt,
+    userId: params.userId ?? null,
+  });
+}
+
+export { triggerConsentReviewNotifications };
