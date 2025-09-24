@@ -116,6 +116,15 @@ export async function recordAttendance(input: {
     throw new AppError('Justification is required when marking an absence');
   }
 
+  const enrollment = await getEnrollmentById(input.enrollmentId);
+  if (!enrollment) {
+    throw new AppError('Enrollment not found', 404);
+  }
+
+  if (enrollment.status === 'suspended' || enrollment.status === 'terminated') {
+    throw new AppError('Attendance can only be recorded for active enrollments', 400);
+  }
+
   const attendance = await upsertAttendance({
     enrollmentId: input.enrollmentId,
     date: input.date,
@@ -135,12 +144,12 @@ export async function recordAttendance(input: {
     },
   });
 
-  const enrollment = await getEnrollmentById(attendance.enrollmentId);
-  if (!enrollment) {
+  const updatedEnrollment = await getEnrollmentById(attendance.enrollmentId);
+  if (!updatedEnrollment) {
     throw new AppError('Failed to load enrollment after recording attendance', 500);
   }
 
-  const summary = enrollment.attendance;
+  const summary = updatedEnrollment.attendance;
   const attendanceRate = summary.attendanceRate;
   const isRisk = attendanceRate !== null && attendanceRate < ATTENDANCE_MINIMUM_RATE;
 
@@ -148,13 +157,13 @@ export async function recordAttendance(input: {
     publishNotificationEvent({
       type: 'attendance.low_attendance',
       data: {
-        enrollmentId: enrollment.id,
-        beneficiaryId: enrollment.beneficiaryId,
-        beneficiaryName: enrollment.beneficiaryName,
-        cohortId: enrollment.cohortId,
-        cohortCode: enrollment.cohortCode,
-        projectId: enrollment.projectId,
-        projectName: enrollment.projectName,
+        enrollmentId: updatedEnrollment.id,
+        beneficiaryId: updatedEnrollment.beneficiaryId,
+        beneficiaryName: updatedEnrollment.beneficiaryName,
+        cohortId: updatedEnrollment.cohortId,
+        cohortCode: updatedEnrollment.cohortCode,
+        projectId: updatedEnrollment.projectId,
+        projectName: updatedEnrollment.projectName,
         attendanceRate,
         threshold: ATTENDANCE_MINIMUM_RATE,
         totalSessions: summary.totalSessions,
