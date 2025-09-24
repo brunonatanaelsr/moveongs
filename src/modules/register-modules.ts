@@ -27,6 +27,7 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(projectRoutes);
   await app.register(enrollmentRoutes);
   await app.register(analyticsRoutes);
+  await app.register(feedRoutes);
   await app.register(beneficiaryRoutes);
   await app.register(formRoutes);
   await app.register(consentRoutes);
@@ -35,6 +36,6 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(evolutionRoutes);
   await app.register(actionPlanRoutes);
   await app.register(timelineRoutes);
-  await app.register(feedRoutes);
+
 
 }
