@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { Shell } from '../components/Shell';
 import { useRequirePermission } from '../hooks/useRequirePermission';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
@@ -14,6 +15,9 @@ import { ConsentTable } from '../components/ConsentTable';
 import { FiltersBar } from '../components/FiltersBar';
 import { ExportButtons } from '../components/ExportButtons';
 import { LoadingState } from '../components/LoadingState';
+import { MessageCenter } from '../components/MessageCenter';
+import { InstitutionalFeed } from '../components/InstitutionalFeed';
+import { ActionPlanPanel } from '../components/ActionPlanPanel';
 import { formatCount, formatPercent } from '../utils/format';
 
 export default function DashboardPage() {
@@ -55,7 +59,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="grid gap-4 lg:grid-cols-3">
-            <TimeSeriesChart title="Novas beneficiárias" data={overview.series.novas_beneficiarias} />
+            <TimeSeriesChart title="Novas beneficiárias (histórico)" data={overview.series.novas_beneficiarias} />
             <TimeSeriesChart title="Novas matrículas" data={overview.series.novas_matriculas} />
             <TimeSeriesChart title="Assiduidade média" data={overview.series.assiduidade_media} valueType="percent" />
           </section>
@@ -112,6 +116,13 @@ export default function DashboardPage() {
           </section>
         </div>
       )}
+
+      <MessageCenter />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <InstitutionalFeed />
+        <ActionPlanPanel />
+      </div>
     </Shell>
   );
 }
