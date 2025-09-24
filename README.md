@@ -85,6 +85,7 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 - Conectar o frontend `/dashboard` aos ambientes reais (configurar `NEXT_PUBLIC_API_URL`).
 - Expandir endpoints para feed/mensagens, planos de ação completos e notificações.
 - Adicionar observabilidade (logs estruturados/métricas) e pipeline CI/CD.
+- Consultar o [Backlog CODEx — Cobertura da Especificação IMM](docs/backlog-codex.md) para planejamento detalhado de epics e stories.
 
 ## Licença
 
