@@ -86,9 +86,23 @@ const NOTIFY_LABELS: Record<FeedPost['notifyChannels'][number], string> = {
 
 export function InstitutionalFeed() {
   const [confirmedPosts, setConfirmedPosts] = useState<Record<string, boolean>>({});
+  const [activeAudiences, setActiveAudiences] = useState<string[]>([]);
+
+  const audiences = useMemo(
+    () => Array.from(new Set(POSTS.flatMap((post) => post.audiences))).sort(),
+    [],
+  );
+
+  const filteredPosts = useMemo(() => {
+    if (activeAudiences.length === 0) {
+      return POSTS;
+    }
+
+    return POSTS.filter((post) => activeAudiences.some((audience) => post.audiences.includes(audience)));
+  }, [activeAudiences]);
 
   const totals = useMemo(() => {
-    return POSTS.reduce(
+    return filteredPosts.reduce(
       (acc, post) => {
         const confirmed = confirmedPosts[post.id] ? post.stats.pending + post.stats.confirmed : post.stats.confirmed;
         const pending = confirmedPosts[post.id] ? 0 : post.stats.pending;
@@ -99,29 +113,84 @@ export function InstitutionalFeed() {
       },
       { confirmed: 0, pending: 0 },
     );
-  }, [confirmedPosts]);
+  }, [confirmedPosts, filteredPosts]);
 
   return (
     <article className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur-3xl">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Feed institucional segmentado</h2>
-          <p className="text-sm text-white/60">
-            Conteúdos direcionados por público, com confirmação de leitura e trilhas de comunicação automatizadas.
-          </p>
+      <header className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Feed institucional segmentado</h2>
+            <p className="text-sm text-white/60">
+              Conteúdos direcionados por público, com confirmação de leitura e trilhas de comunicação automatizadas.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1">
+              {totals.confirmed} confirmações
+            </span>
+            <span className="rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-rose-200">
+              {totals.pending} pendentes
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1">
-            {totals.confirmed} confirmações
-          </span>
-          <span className="rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-rose-200">
-            {totals.pending} pendentes
-          </span>
+
+        <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-white/60">
+            <span>Segmentação ativa</span>
+            {activeAudiences.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveAudiences([])}
+                className="rounded-full border border-white/20 bg-white/0 px-3 py-1 text-[11px] font-medium text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {audiences.map((audience) => {
+              const isActive = activeAudiences.includes(audience);
+              return (
+                <button
+                  key={audience}
+                  type="button"
+                  onClick={() =>
+                    setActiveAudiences((prev) =>
+                      prev.includes(audience) ? prev.filter((item) => item !== audience) : [...prev, audience],
+                    )
+                  }
+                  className={clsx(
+                    'rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide transition',
+                    isActive
+                      ? 'border-white/30 bg-white/10 text-white shadow-inner'
+                      : 'border-white/10 bg-white/0 text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {audience}
+                </button>
+              );
+            })}
+            {audiences.length === 0 && (
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+                Nenhum segmento cadastrado
+              </span>
+            )}
+          </div>
+          {activeAudiences.length > 0 && (
+            <div className="flex flex-wrap gap-2 text-xs text-white/60">
+              {activeAudiences.map((audience) => (
+                <span key={audience} className="rounded-full border border-white/10 bg-white/10 px-3 py-1">
+                  {audience}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
       <div className="grid gap-4">
-        {POSTS.map((post) => {
+        {filteredPosts.map((post) => {
           const isConfirmed = confirmedPosts[post.id] ?? false;
           return (
             <article
@@ -210,6 +279,11 @@ export function InstitutionalFeed() {
             </article>
           );
         })}
+        {filteredPosts.length === 0 && (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-white/60">
+            Nenhuma publicação para os segmentos selecionados.
+          </div>
+        )}
       </div>
     </article>
   );
