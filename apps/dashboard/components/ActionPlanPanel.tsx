@@ -89,6 +89,7 @@ function StatusBadge({ status }: { status: ActionTask['status'] }) {
 
 export function ActionPlanPanel() {
   const [tasks, setTasks] = useState(TASKS);
+  const [statusFilter, setStatusFilter] = useState<'todas' | ActionTask['status']>('todas');
 
   const progress = useMemo(() => {
     const total = tasks.length;
@@ -101,26 +102,80 @@ export function ActionPlanPanel() {
     };
   }, [tasks]);
 
+  const countsByStatus = useMemo<Record<ActionTask['status'], number>>(
+    () =>
+      tasks.reduce(
+        (acc, task) => {
+          acc[task.status] += 1;
+          return acc;
+        },
+        { pendente: 0, em_andamento: 0, concluida: 0 } as Record<ActionTask['status'], number>,
+      ),
+    [tasks],
+  );
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter === 'todas') {
+      return tasks;
+    }
+
+    return tasks.filter((task) => task.status === statusFilter);
+  }, [statusFilter, tasks]);
+
   const nextReminders = useMemo(() => tasks.filter((task) => task.status !== 'concluida'), [tasks]);
 
   return (
     <article className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur-3xl">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Plano de ação integrado</h2>
-          <p className="text-sm text-white/60">
-            Tarefas com acompanhamento em tempo real, progresso consolidado e lembretes conectados às notificações do Instituto.
-          </p>
+      <header className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Plano de ação integrado</h2>
+            <p className="text-sm text-white/60">
+              Tarefas com acompanhamento em tempo real, progresso consolidado e lembretes conectados às notificações do Instituto.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2 text-right text-sm text-white/70">
+            <span className="text-3xl font-semibold text-white">{progress.percentage}%</span>
+            <span className="text-xs uppercase tracking-wide text-white/50">{progress.completed} de {progress.total} etapas concluídas</span>
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-2 text-right text-sm text-white/70">
-          <span className="text-3xl font-semibold text-white">{progress.percentage}%</span>
-          <span className="text-xs uppercase tracking-wide text-white/50">{progress.completed} de {progress.total} etapas concluídas</span>
+        <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/10">
+          <div
+            className="h-full rounded-full bg-imm-emerald/80 transition-all"
+            style={{ width: `${progress.percentage}%` }}
+          />
         </div>
       </header>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-4">
-          {tasks.map((task) => (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-white/10 bg-white/5 p-4">
+            <span className="text-xs uppercase tracking-wide text-white/60">Filtrar por status</span>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { key: 'todas', label: 'Todas as tarefas' },
+                { key: 'pendente', label: 'Pendentes' },
+                { key: 'em_andamento', label: 'Em andamento' },
+                { key: 'concluida', label: 'Concluídas' },
+              ] as const).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setStatusFilter(option.key)}
+                  className={clsx(
+                    'rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide transition',
+                    statusFilter === option.key
+                      ? 'border-white/30 bg-white/10 text-white shadow-inner'
+                      : 'border-white/10 bg-white/0 text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredTasks.map((task) => (
             <article
               key={task.id}
               className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-inner shadow-black/10"
@@ -182,9 +237,32 @@ export function ActionPlanPanel() {
               </div>
             </article>
           ))}
+          {filteredTasks.length === 0 && (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-white/60">
+              Nenhuma tarefa para o status selecionado.
+            </div>
+          )}
         </div>
 
         <aside className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-4">
+          <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+            <span className="text-[11px] uppercase tracking-wide text-white/60">Resumo por status</span>
+            <div className="flex flex-col gap-1">
+              <span className="flex items-center justify-between">
+                <span>Pendentes</span>
+                <span className="text-sm font-semibold text-white">{countsByStatus.pendente}</span>
+              </span>
+              <span className="flex items-center justify-between">
+                <span>Em andamento</span>
+                <span className="text-sm font-semibold text-white">{countsByStatus.em_andamento}</span>
+              </span>
+              <span className="flex items-center justify-between">
+                <span>Concluídas</span>
+                <span className="text-sm font-semibold text-white">{countsByStatus.concluida}</span>
+              </span>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-2">
             <h4 className="text-sm font-semibold uppercase tracking-wide text-white/70">Próximos lembretes</h4>
             <p className="text-xs text-white/60">
