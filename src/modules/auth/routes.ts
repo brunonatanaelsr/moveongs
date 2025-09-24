@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { AppError } from '../../shared/errors';
 import { getUserById } from '../users/repository';
-import { loginBodySchema } from './schemas';
-import { validateCredentials } from './service';
+import { loginBodySchema, passwordForgotBodySchema, passwordResetBodySchema } from './schemas';
+import { requestPasswordReset, resetPasswordWithToken, validateCredentials } from './service';
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/auth/login', async (request, reply) => {
@@ -57,5 +57,29 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const token = request.headers.authorization?.replace('Bearer ', '') ?? '';
     // Stateless JWT: clients should discard the token. Hook for future blacklist implementation.
     return reply.code(200).send({ revoked: Boolean(token) });
+  });
+
+  app.post('/auth/password/forgot', async (request, reply) => {
+    const parsed = passwordForgotBodySchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      throw new AppError('Invalid request', 400, parsed.error.flatten());
+    }
+
+    await requestPasswordReset(parsed.data.email, parsed.data.redirectTo);
+
+    return reply.code(202).send({ message: 'If the account exists, recovery instructions were sent.' });
+  });
+
+  app.post('/auth/password/reset', async (request, reply) => {
+    const parsed = passwordResetBodySchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      throw new AppError('Invalid request', 400, parsed.error.flatten());
+    }
+
+    await resetPasswordWithToken(parsed.data.token, parsed.data.password);
+
+    return reply.code(204).send();
   });
 };

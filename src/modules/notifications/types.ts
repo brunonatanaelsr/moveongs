@@ -104,6 +104,17 @@ export type ActionItemOverdueEvent = {
   };
 };
 
+export type PasswordResetRequestedEvent = {
+  type: 'auth.password_reset_requested';
+  triggeredAt?: string;
+  data: {
+    email: string;
+    name: string;
+    resetUrl: string;
+    expiresAt: string;
+  };
+};
+
 export type NotificationEvent =
   | EnrollmentCreatedEvent
   | AttendanceRecordedEvent
@@ -111,7 +122,8 @@ export type NotificationEvent =
   | ConsentRecordedEvent
   | ConsentUpdatedEvent
   | ActionItemDueSoonEvent
-  | ActionItemOverdueEvent;
+  | ActionItemOverdueEvent
+  | PasswordResetRequestedEvent;
 
 export type NotificationChannel = 'email' | 'whatsapp' | 'webhook';
 
