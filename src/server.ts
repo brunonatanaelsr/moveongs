@@ -1,10 +1,15 @@
 import { createApp } from './app';
 import { getEnv } from './config/env';
 import { logger } from './config/logger';
+import { startComplianceJobs } from './modules/compliance/service';
 
 async function bootstrap() {
   const env = getEnv();
   const app = await createApp();
+
+  if (env.NODE_ENV !== 'test') {
+    startComplianceJobs();
+  }
 
   try {
     await app.listen({ host: env.HOST, port: Number(env.PORT) });

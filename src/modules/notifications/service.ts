@@ -142,7 +142,12 @@ async function dispatchWhatsApp(payload: WhatsAppNotificationPayload) {
 async function dispatchWebhook(payload: WebhookJobPayload) {
   const fetchFn: ((input: string, init?: any) => Promise<any>) | undefined = (globalThis as any).fetch;
   if (!fetchFn) {
-    throw new Error('Fetch API not available for webhook dispatch');
+    logger.warn({
+      event: payload.event.type,
+      webhookId: payload.subscription.id,
+      url: payload.subscription.url,
+    }, 'Skipping webhook dispatch: fetch API unavailable');
+    return;
   }
 
   const controller = new AbortController();

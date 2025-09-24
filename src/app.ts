@@ -9,7 +9,7 @@ import { getEnv } from './config/env';
 import { logger } from './config/logger';
 import { AppError } from './shared/errors';
 import { registerModules } from './modules/register-modules';
-import { startComplianceJobs } from './modules/compliance/service';
+import { stopComplianceJobs } from './modules/compliance/service';
 
 export async function createApp(): Promise<FastifyInstance> {
   const env = getEnv();
@@ -38,9 +38,9 @@ export async function createApp(): Promise<FastifyInstance> {
 
   await registerModules(app);
 
-  if (env.NODE_ENV !== 'test') {
-    startComplianceJobs();
-  }
+  app.addHook('onClose', async () => {
+    stopComplianceJobs();
+  });
 
   return app;
 }
