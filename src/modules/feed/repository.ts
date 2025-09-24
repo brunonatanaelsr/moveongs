@@ -246,7 +246,7 @@ export async function updatePost(id: string, params: {
   visibility?: PostVisibility;
   publishedAt?: Date | null;
 }): Promise<PostRecord> {
-  return withTransaction(async (client) => {
+  await withTransaction(async (client) => {
     const current = await client.query(
       'select * from posts where id = $1 for update',
       [id],
@@ -271,9 +271,14 @@ export async function updatePost(id: string, params: {
       `update posts set\n         project_id = $2,\n         title = $3,\n         body = $4,\n         tags = $5,\n         visibility = $6,\n         published_at = $7\n       where id = $1`,
       [id, projectId ?? null, title ?? null, body ?? null, tags && tags.length > 0 ? tags : null, visibility, publishedAt],
     );
-
-    return fetchPostById(id);
   });
+
+  const updated = await fetchPostById(id);
+  if (!updated) {
+    throw new AppError('Failed to load post after update');
+  }
+
+  return updated;
 }
 
 export async function deletePost(id: string): Promise<void> {

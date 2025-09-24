@@ -18,6 +18,12 @@ const envSchema = z.object({
   NOTIFICATIONS_WHATSAPP_NUMBERS: z.string().optional(),
   NOTIFICATIONS_WEBHOOK_TIMEOUT_MS: z.string().regex(/^[0-9]+$/).default('5000'),
   NOTIFICATIONS_WEBHOOK_SECRET: z.string().optional(),
+  MFA_SESSION_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
+  MFA_TOTP_ISSUER: z.string().default('IMM Dashboard'),
+  MFA_WEBAUTHN_RP_ID: z.string().default('imm.local'),
+  MFA_WEBAUTHN_RP_NAME: z.string().default('IMM Dashboard'),
+  MFA_WEBAUTHN_ORIGIN: z.string().url().default('https://imm.local'),
+  DSR_SLA_DAYS: z.string().regex(/^[0-9]+$/).default('15'),
 });
 
 type Env = z.infer<typeof envSchema>;

@@ -72,6 +72,17 @@ export type ConsentUpdatedEvent = {
   };
 };
 
+export type ConsentReviewDueEvent = {
+  type: 'consent.review_due';
+  triggeredAt?: string;
+  data: {
+    consentId: string;
+    beneficiaryId: string;
+    dueAt: string;
+    taskId: string;
+  };
+};
+
 export type ActionItemDueSoonEvent = {
   type: 'action_item.due_soon';
   triggeredAt?: string;
@@ -115,15 +126,72 @@ export type PasswordResetRequestedEvent = {
   };
 };
 
+export type AuthMfaUpdatedEvent = {
+  type: 'auth.mfa_updated';
+  triggeredAt?: string;
+  data: {
+    userId: string;
+    method: 'totp' | 'webauthn';
+    status: 'enabled' | 'disabled';
+  };
+};
+
+export type PrivacyDsrCreatedEvent = {
+  type: 'privacy.dsr_created';
+  triggeredAt?: string;
+  data: {
+    requestId: string;
+    beneficiaryId: string;
+    dueAt: string;
+  };
+};
+
+export type PrivacyDsrCompletedEvent = {
+  type: 'privacy.dsr_completed';
+  triggeredAt?: string;
+  data: {
+    requestId: string;
+    beneficiaryId: string;
+    completedAt: string;
+    slaBreached: boolean;
+  };
+};
+
+export type PrivacyDsrDueSoonEvent = {
+  type: 'privacy.dsr_due_soon';
+  triggeredAt?: string;
+  data: {
+    requestId: string;
+    beneficiaryId: string;
+    dueAt: string;
+  };
+};
+
+export type PrivacyDsrSlaBreachedEvent = {
+  type: 'privacy.dsr_sla_breached';
+  triggeredAt?: string;
+  data: {
+    requestId: string;
+    beneficiaryId: string;
+    dueAt: string;
+  };
+};
+
 export type NotificationEvent =
   | EnrollmentCreatedEvent
   | AttendanceRecordedEvent
   | AttendanceLowAttendanceEvent
   | ConsentRecordedEvent
   | ConsentUpdatedEvent
+  | ConsentReviewDueEvent
   | ActionItemDueSoonEvent
   | ActionItemOverdueEvent
-  | PasswordResetRequestedEvent;
+  | PasswordResetRequestedEvent
+  | AuthMfaUpdatedEvent
+  | PrivacyDsrCreatedEvent
+  | PrivacyDsrCompletedEvent
+  | PrivacyDsrDueSoonEvent
+  | PrivacyDsrSlaBreachedEvent;
 
 export type NotificationChannel = 'email' | 'whatsapp' | 'webhook';
 

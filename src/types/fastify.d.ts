@@ -3,12 +3,17 @@ import '@fastify/jwt';
 
 type AuthorizationRequirement =
   | string
-  | string[]
+  | ReadonlyArray<string>
   | {
-      roles?: string[];
-      permissions?: string[];
+      roles?: ReadonlyArray<string>;
+      permissions?: ReadonlyArray<string>;
       strategy?: 'any' | 'all';
-    };
+    }
+  | Readonly<{
+      roles?: ReadonlyArray<string>;
+      permissions?: ReadonlyArray<string>;
+      strategy?: 'any' | 'all';
+    }>;
 
 declare module 'fastify' {
   interface FastifyInstance {

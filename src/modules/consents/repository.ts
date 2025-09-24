@@ -178,3 +178,121 @@ export async function updateConsent(id: string, params: {
     return mapConsent(refreshed.rows[0]);
   });
 }
+
+export type ConsentReviewTaskRecord = {
+  id: string;
+  consentId: string;
+  beneficiaryId: string;
+  dueAt: string;
+  status: string;
+  lastNotifiedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+};
+
+const REVIEW_INTERVAL_MS = 365 * 24 * 60 * 60 * 1000;
+
+export async function listConsentsNeedingReview(now: Date): Promise<Array<{ consentId: string; beneficiaryId: string; dueAt: Date }>> {
+  const { rows } = await query(
+    `select c.id as consent_id,
+            c.beneficiary_id,
+            c.granted_at,
+            coalesce((select max(cr.completed_at) from consent_review_queue cr where cr.consent_id = c.id), c.granted_at) as last_reviewed_at
+       from consents c
+       left join consent_review_queue pending
+         on pending.consent_id = c.id
+        and pending.status = 'pending'
+      where c.granted = true
+        and c.revoked_at is null
+        and pending.id is null`,
+    [],
+  );
+
+  const candidates: Array<{ consentId: string; beneficiaryId: string; dueAt: Date }> = [];
+
+  for (const row of rows) {
+    const reference = row.last_reviewed_at instanceof Date
+      ? row.last_reviewed_at
+      : new Date(row.last_reviewed_at ?? row.granted_at);
+    if (Number.isNaN(reference.getTime())) {
+      continue;
+    }
+
+    const dueAt = new Date(reference.getTime() + REVIEW_INTERVAL_MS);
+    if (dueAt.getTime() <= now.getTime()) {
+      candidates.push({
+        consentId: row.consent_id,
+        beneficiaryId: row.beneficiary_id,
+        dueAt,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+export async function insertConsentReviewTask(params: {
+  consentId: string;
+  beneficiaryId: string;
+  dueAt: Date;
+}): Promise<ConsentReviewTaskRecord> {
+  const { rows } = await query(
+    `insert into consent_review_queue (consent_id, beneficiary_id, due_at)
+     values ($1, $2, $3)
+     returning *`,
+    [params.consentId, params.beneficiaryId, params.dueAt],
+  );
+
+  return mapReviewTask(rows[0]);
+}
+
+export async function listPendingConsentReviewTasks(): Promise<ConsentReviewTaskRecord[]> {
+  const { rows } = await query(
+    `select *
+       from consent_review_queue
+      where status = 'pending'
+      order by due_at asc`,
+    [],
+  );
+
+  return rows.map(mapReviewTask);
+}
+
+export async function markConsentReviewTaskNotified(taskId: string): Promise<void> {
+  await query(
+    `update consent_review_queue
+        set last_notified_at = now()
+      where id = $1`,
+    [taskId],
+  );
+}
+
+export async function markConsentReviewTaskCompleted(taskId: string): Promise<ConsentReviewTaskRecord> {
+  const { rows } = await query(
+    `update consent_review_queue
+        set status = 'completed',
+            completed_at = now()
+      where id = $1
+      returning *`,
+    [taskId],
+  );
+
+  if (rows.length === 0) {
+    throw new AppError('Review task not found', 404);
+  }
+
+  return mapReviewTask(rows[0]);
+}
+
+function mapReviewTask(row: any): ConsentReviewTaskRecord {
+  return {
+    id: row.id,
+    consentId: row.consent_id,
+    beneficiaryId: row.beneficiary_id,
+    dueAt: row.due_at instanceof Date ? row.due_at.toISOString() : new Date(row.due_at).toISOString(),
+    status: row.status,
+    lastNotifiedAt: row.last_notified_at ? row.last_notified_at.toISOString() : null,
+    completedAt: row.completed_at ? row.completed_at.toISOString() : null,
+    createdAt: row.created_at ? row.created_at.toISOString() : new Date().toISOString(),
+  };
+}

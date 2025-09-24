@@ -4,8 +4,14 @@ import {
   ConsentRecord,
   createConsent,
   getConsentById,
+  insertConsentReviewTask,
   listConsentsByBeneficiary,
+  listConsentsNeedingReview,
+  listPendingConsentReviewTasks,
+  markConsentReviewTaskCompleted,
+  markConsentReviewTaskNotified,
   updateConsent,
+  type ConsentReviewTaskRecord,
 } from './repository';
 import { publishNotificationEvent } from '../notifications/service';
 
@@ -154,4 +160,74 @@ export async function getConsentOrFail(id: string): Promise<ConsentRecord> {
   }
 
   return consent;
+}
+
+export async function runConsentReviewAutomation(now: Date = new Date()): Promise<{ created: string[]; notified: string[] }> {
+  const created: string[] = [];
+  const candidates = await listConsentsNeedingReview(now);
+
+  for (const candidate of candidates) {
+    const task = await insertConsentReviewTask({
+      consentId: candidate.consentId,
+      beneficiaryId: candidate.beneficiaryId,
+      dueAt: candidate.dueAt,
+    });
+    created.push(task.id);
+
+    publishNotificationEvent({
+      type: 'consent.review_due',
+      data: {
+        consentId: candidate.consentId,
+        beneficiaryId: candidate.beneficiaryId,
+        dueAt: task.dueAt,
+        taskId: task.id,
+      },
+    });
+  }
+
+  const notified: string[] = [];
+  const pending = await listPendingConsentReviewTasks();
+  const createdSet = new Set(created);
+  for (const task of pending) {
+    if (createdSet.has(task.id)) {
+      continue;
+    }
+    const dueAt = new Date(task.dueAt);
+    const lastNotifiedAt = task.lastNotifiedAt ? new Date(task.lastNotifiedAt) : null;
+
+    if (dueAt.getTime() <= now.getTime() && (!lastNotifiedAt || now.getTime() - lastNotifiedAt.getTime() >= 24 * 60 * 60 * 1000)) {
+      publishNotificationEvent({
+        type: 'consent.review_due',
+        data: {
+          consentId: task.consentId,
+          beneficiaryId: task.beneficiaryId,
+          dueAt: task.dueAt,
+          taskId: task.id,
+        },
+      });
+      await markConsentReviewTaskNotified(task.id);
+      notified.push(task.id);
+    }
+  }
+
+  return { created, notified };
+}
+
+export async function completeConsentReviewTask(params: {
+  taskId: string;
+  userId?: string | null;
+  justification?: string | null;
+}): Promise<ConsentReviewTaskRecord> {
+  const task = await markConsentReviewTaskCompleted(params.taskId);
+
+  await recordAuditLog({
+    userId: params.userId ?? null,
+    entity: 'consent_review',
+    entityId: task.consentId,
+    action: 'review_completed',
+    afterData: { taskId: task.id, completedAt: task.completedAt, justification: params.justification ?? null },
+    justification: params.justification ?? null,
+  });
+
+  return task;
 }

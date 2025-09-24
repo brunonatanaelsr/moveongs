@@ -3,11 +3,12 @@ import { AppError } from '../../shared/errors';
 import { beneficiaryIdParamSchema } from '../beneficiaries/schemas';
 import {
   consentIdParamSchema,
+  consentReviewCompletionBodySchema,
   createConsentBodySchema,
   listConsentQuerySchema,
   updateConsentBodySchema,
 } from './schemas';
-import { getConsentOrFail, listConsents, registerConsent, updateExistingConsent } from './service';
+import { completeConsentReviewTask, getConsentOrFail, listConsents, registerConsent, updateExistingConsent } from './service';
 
 const READ_REQUIREMENTS = {
   roles: ['admin', 'coordenacao', 'tecnica', 'recepcao', 'financeiro', 'voluntaria', 'leitura_externa'],
@@ -106,5 +107,27 @@ export const consentRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { consent };
+  });
+
+  app.post('/consent-reviews/:id/complete', {
+    preHandler: [app.authenticate, app.authorize(UPDATE_REQUIREMENTS)],
+  }, async (request) => {
+    const params = consentIdParamSchema.safeParse(request.params);
+    if (!params.success) {
+      throw new AppError('Invalid params', 400, params.error.flatten());
+    }
+
+    const body = consentReviewCompletionBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      throw new AppError('Invalid body', 400, body.error.flatten());
+    }
+
+    const task = await completeConsentReviewTask({
+      taskId: params.data.id,
+      userId: request.user?.sub ?? null,
+      justification: body.data.justification,
+    });
+
+    return { task };
   });
 };

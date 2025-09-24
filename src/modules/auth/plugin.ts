@@ -2,12 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { ForbiddenError, UnauthorizedError } from '../../shared/errors';
 
 interface AuthorizationOptions {
-  roles?: string[];
-  permissions?: string[];
+  roles?: ReadonlyArray<string>;
+  permissions?: ReadonlyArray<string>;
   strategy?: 'any' | 'all';
 }
 
-type AuthorizationRequirement = string | string[] | AuthorizationOptions;
+type AuthorizationRequirement =
+  | string
+  | ReadonlyArray<string>
+  | AuthorizationOptions
+  | Readonly<AuthorizationOptions>;
 
 export async function registerAuthDecorators(app: FastifyInstance) {
   app.decorate('authenticate', async (request) => {
@@ -64,14 +68,16 @@ function normalizeRequirement(requirement: AuthorizationRequirement): Required<A
     return { roles: requirement, permissions: [], strategy: 'any' };
   }
 
+  const options = requirement as AuthorizationOptions | Readonly<AuthorizationOptions>;
+
   return {
-    roles: requirement.roles ?? [],
-    permissions: requirement.permissions ?? [],
-    strategy: requirement.strategy ?? 'any',
+    roles: options.roles ? Array.from(options.roles) : [],
+    permissions: options.permissions ? Array.from(options.permissions) : [],
+    strategy: options.strategy ?? 'any',
   };
 }
 
-function matches(set: Set<string>, expected: string[], strategy: 'any' | 'all') {
+function matches(set: Set<string>, expected: readonly string[], strategy: 'any' | 'all') {
   if (strategy === 'all') {
     return expected.every((value) => set.has(value));
   }

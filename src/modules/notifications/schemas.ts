@@ -7,6 +7,12 @@ const eventTypes = [
   'attendance.low_attendance',
   'consent.recorded',
   'consent.updated',
+  'auth.mfa_updated',
+  'consent.review_due',
+  'privacy.dsr_created',
+  'privacy.dsr_completed',
+  'privacy.dsr_due_soon',
+  'privacy.dsr_sla_breached',
 ] as const satisfies NotificationEvent['type'][];
 
 export const createWebhookSchema = z.object({

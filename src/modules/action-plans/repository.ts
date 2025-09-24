@@ -74,9 +74,22 @@ function mapActionItem(row: any): ActionItemRecord {
   };
 }
 
+function getExecutor(client?: import('pg').PoolClient) {
+  return <T extends import('pg').QueryResultRow = import('pg').QueryResultRow>(
+    sql: string,
+    values?: unknown[],
+  ) => {
+    if (client) {
+      return client.query<T>(sql, values as any[] | undefined);
+    }
+
+    return query<T>(sql, values as any[] | undefined);
+  };
+}
+
 async function fetchPlanWithItems(id: string, client?: import('pg').PoolClient) {
-  const executor = client ?? { query };
-  const { rows } = await executor.query('select * from action_plans where id = $1', [id]);
+  const execute = getExecutor(client);
+  const { rows } = await execute('select * from action_plans where id = $1', [id]);
   if (rows.length === 0) {
     return null;
   }
@@ -91,14 +104,14 @@ async function fetchItemsByPlanIds(planIds: string[], client?: import('pg').Pool
     return new Map();
   }
 
-  const executor = client ?? { query };
+  const execute = getExecutor(client);
 
   const placeholders = planIds.map((_, index) => `$${index + 1}`).join(',');
   const sql = `select * from action_items
       where action_plan_id in (${placeholders})
       order by created_at asc`;
 
-  const { rows } = await executor.query(sql, planIds);
+  const { rows } = await execute(sql, planIds);
 
   const map = new Map<string, ActionItemRecord[]>();
 

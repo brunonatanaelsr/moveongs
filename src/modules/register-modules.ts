@@ -19,6 +19,7 @@ import { actionPlanRoutes } from './action-plans/routes';
 import { timelineRoutes } from './timeline/routes';
 import { feedRoutes } from './feed/routes';
 import { messageRoutes } from './messages/routes';
+import { privacyRoutes } from './privacy/routes';
 
 
 export async function registerModules(app: FastifyInstance) {
@@ -42,6 +43,7 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(evolutionRoutes);
   await app.register(actionPlanRoutes);
   await app.register(timelineRoutes);
+  await app.register(privacyRoutes);
 
 
 }

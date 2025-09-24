@@ -251,6 +251,16 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): EmailMessage 
           event.data.revokedAt ? `Revogado em: ${event.data.revokedAt}` : null,
         ].filter(Boolean).join('\n'),
       };
+    case 'consent.review_due':
+      return {
+        subject: 'Revisão anual de consentimento necessária',
+        body: [
+          `O consentimento ${event.data.consentId} requer revisão anual.`,
+          `Beneficiário(a): ${event.data.beneficiaryId}`,
+          `Data limite: ${event.data.dueAt}`,
+          `Tarefa: ${event.data.taskId}`,
+        ].join('\n'),
+      };
     case 'action_item.due_soon': {
       const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
       const dueText = event.data.dueInDays <= 0
@@ -299,6 +309,54 @@ function buildEmailMessage(event: NotificationEventWithTimestamp): EmailMessage 
           'Se você não solicitou essa redefinição, ignore esta mensagem.',
         ].join('\n'),
       };
+    case 'auth.mfa_updated': {
+      const statusText = event.data.status === 'enabled' ? 'ativado' : 'desativado';
+      return {
+        subject: `MFA ${statusText} (${event.data.method})`,
+        body: [
+          `O método de MFA "${event.data.method}" foi ${statusText} para o usuário ${event.data.userId}.`,
+          `Horário: ${event.triggeredAt}`,
+        ].join('\n'),
+      };
+    }
+    case 'privacy.dsr_created':
+      return {
+        subject: 'Novo DSR registrado',
+        body: [
+          `Uma solicitação de exportação de dados foi registrada.`,
+          `ID: ${event.data.requestId}`,
+          `Beneficiário(a): ${event.data.beneficiaryId}`,
+          `Prazo: ${event.data.dueAt}`,
+        ].join('\n'),
+      };
+    case 'privacy.dsr_completed':
+      return {
+        subject: 'Exportação DSR concluída',
+        body: [
+          `A solicitação ${event.data.requestId} foi concluída.`,
+          `Beneficiário(a): ${event.data.beneficiaryId}`,
+          `Concluído em: ${event.data.completedAt}`,
+          `SLA violado: ${event.data.slaBreached ? 'Sim' : 'Não'}`,
+        ].join('\n'),
+      };
+    case 'privacy.dsr_due_soon':
+      return {
+        subject: 'DSR próximo do vencimento',
+        body: [
+          `A solicitação ${event.data.requestId} vence em breve.`,
+          `Beneficiário(a): ${event.data.beneficiaryId}`,
+          `Prazo: ${event.data.dueAt}`,
+        ].join('\n'),
+      };
+    case 'privacy.dsr_sla_breached':
+      return {
+        subject: 'SLA de DSR violado',
+        body: [
+          `A solicitação ${event.data.requestId} excedeu o prazo.`,
+          `Beneficiário(a): ${event.data.beneficiaryId}`,
+          `Prazo original: ${event.data.dueAt}`,
+        ].join('\n'),
+      };
     default:
       return null;
   }
@@ -319,6 +377,8 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
       return `Consentimento ${event.data.type} registrado para beneficiário ${event.data.beneficiaryId}.`;
     case 'consent.updated':
       return `Consentimento ${event.data.type} atualizado (${event.data.granted ? 'ativo' : 'revogado'}).`;
+    case 'consent.review_due':
+      return `Revisão anual pendente para consentimento ${event.data.consentId} (beneficiário ${event.data.beneficiaryId}).`;
     case 'action_item.due_soon': {
       const beneficiary = event.data.beneficiaryName ?? event.data.beneficiaryId;
       const dueText = event.data.dueInDays <= 0
@@ -335,6 +395,16 @@ function buildWhatsAppMessage(event: NotificationEventWithTimestamp): string | n
     }
     case 'auth.password_reset_requested':
       return null;
+    case 'auth.mfa_updated':
+      return `MFA ${event.data.status === 'enabled' ? 'ativado' : 'desativado'} (${event.data.method}) para usuário ${event.data.userId}.`;
+    case 'privacy.dsr_created':
+      return `Novo DSR ${event.data.requestId} para beneficiário ${event.data.beneficiaryId} (prazo ${event.data.dueAt}).`;
+    case 'privacy.dsr_completed':
+      return `DSR ${event.data.requestId} concluído para beneficiário ${event.data.beneficiaryId}.`;
+    case 'privacy.dsr_due_soon':
+      return `DSR ${event.data.requestId} vence em breve (prazo ${event.data.dueAt}).`;
+    case 'privacy.dsr_sla_breached':
+      return `Atenção: DSR ${event.data.requestId} venceu o prazo (beneficiário ${event.data.beneficiaryId}).`;
     default:
       return null;
   }

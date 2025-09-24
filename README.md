@@ -50,6 +50,9 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 - `tools/pdf-renderer/` – microserviço Node (Playwright + Handlebars) para gerar PDFs (ex.: recibos e dashboard).
 - `apps/dashboard/` – esqueleto Next.js do dashboard institucional (filtros, gráficos, exportações CSV/PDF).
 - `src/modules/notifications` – fila de disparos externos (e-mail/WhatsApp) e webhooks configuráveis.
+- `src/modules/auth/mfa` – fluxo de MFA com TOTP/WebAuthn e sessões temporárias.
+- `src/modules/privacy` – exportações DSR com SLA monitorado e auditoria.
+- `src/modules/compliance` – automações de revisão anual de consentimentos e monitor de SLA.
 
 ## Analytics e Dashboard
 

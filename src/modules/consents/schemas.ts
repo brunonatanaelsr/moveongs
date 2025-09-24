@@ -31,6 +31,10 @@ export const consentIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const consentReviewCompletionBodySchema = z.object({
+  justification: z.string().max(500).optional(),
+});
+
 export type CreateConsentBody = z.infer<typeof createConsentBodySchema>;
 export type UpdateConsentBody = z.infer<typeof updateConsentBodySchema>;
 export type ListConsentQuery = z.infer<typeof listConsentQuerySchema>;
