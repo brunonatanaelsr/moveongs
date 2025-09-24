@@ -69,9 +69,11 @@ Os objetivos de serviço estão detalhados em [`slos.md`](./slos.md). Resumo rá
 * **Latência p95**: ≤ 400 ms para rotas críticas (`/sessions`, `/orders/*`).
 * **Taxa de erros de fila**: < 1% em jobs críticos.
 
-## Alertas e runbooks
+## Alertas, runbooks e guias
 
 Os procedimentos operacionais estão documentados em [`runbooks`](./runbooks). Cada alerta mapeia 1:1 com um runbook contendo passos de diagnóstico, mitigação e contato.
+
+Para incidentes multifatoriais ou que envolvem dependências externas, siga também o guia de [análise avançada de falhas](./analise-avancada-de-falhas.md), que descreve um fluxo detalhado de investigação pós-alerta.
 
 ### Sugestão de pipeline de alertas
 
