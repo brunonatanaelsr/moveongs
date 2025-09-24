@@ -1,0 +1,76 @@
+<div class="imm-meta">Instituto Move Marias • Formulário Estruturado</div>
+<section class="imm-section">
+  <h1>{{templateTitle}}</h1>
+  <p><strong>Beneficiária:</strong> {{beneficiary.name}}</p>
+  <p><strong>ID da beneficiária:</strong> {{beneficiary.id}}</p>
+  <p><strong>Tipo de formulário:</strong> {{formType}}</p>
+  <p><strong>Versão do schema:</strong> {{schemaVersion}}</p>
+  <p><strong>ID da submissão:</strong> {{submissionId}}</p>
+  {{#if createdAt}}
+  <p><strong>Preenchido em:</strong> {{createdAt}}</p>
+  {{/if}}
+  {{#if updatedAt}}
+  <p><strong>Última atualização:</strong> {{updatedAt}}</p>
+  {{/if}}
+  {{#if generatedAt}}
+  <p><strong>Documento gerado em:</strong> {{generatedAt}}</p>
+  {{/if}}
+</section>
+
+{{#each sections}}
+<section class="imm-section">
+  <h2>{{title}}</h2>
+  {{#if entries.length}}
+    <ul>
+      {{#each entries}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  {{else}}
+    <p>Sem informações registradas.</p>
+  {{/if}}
+</section>
+{{/each}}
+
+{{#if signatures.length}}
+<section class="imm-section">
+  <h2>Assinaturas</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Responsável</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each signatures}}
+      <tr>
+        <td>{{name}}</td>
+        <td>{{#if signedAt}}{{signedAt}}{{else}}Não informado{{/if}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+{{/if}}
+
+{{#if attachments.length}}
+<section class="imm-section">
+  <h2>Anexos</h2>
+  <ul>
+    {{#each attachments}}
+    <li>
+      {{#if fileName}}
+        {{fileName}}
+      {{else}}
+        {{#if mimeType}}
+          Arquivo ({{mimeType}})
+        {{else}}
+          Arquivo anexado
+        {{/if}}
+      {{/if}}
+    </li>
+    {{/each}}
+  </ul>
+</section>
+{{/if}}

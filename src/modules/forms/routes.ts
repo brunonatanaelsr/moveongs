@@ -17,6 +17,7 @@ import {
   getSubmissionOrFail,
   listFormTemplates,
   listSubmissions,
+  generateSubmissionPdf,
   updateFormTemplate,
   updateSubmission,
 } from './service';
@@ -161,6 +162,20 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
 
     const submission = await getSubmissionOrFail(parsedParams.data.id);
     return { submission };
+  });
+
+  app.get('/forms/:id/pdf', {
+    preHandler: [app.authenticate, app.authorize(SUBMISSION_READ_REQUIREMENTS)],
+  }, async (request, reply) => {
+    const parsedParams = submissionIdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      throw new AppError('Invalid params', 400, parsedParams.error.flatten());
+    }
+
+    const { buffer, filename } = await generateSubmissionPdf(parsedParams.data.id);
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    return reply.send(buffer);
   });
 
   app.patch('/forms/:id', {
