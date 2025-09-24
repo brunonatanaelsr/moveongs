@@ -8,13 +8,6 @@ Este backlog converte as necessidades legais e operacionais em stories acionáve
 - **Dependências:** utilize os IDs (ex.: `SEC-04`) para vincular stories relacionadas.
 - **DoD padrão:** testes automatizados, observabilidade, revisão de segurança, documentação atualizada, migrações versionadas/rollback, demo validada.
 
-## Próximos passos imediatos
-
-1. **Rodada de alinhamento com stakeholders:** validar escopo, estimativas e prioridades legais (EPIC 1) com jurídico, segurança e liderança de produto antes de abrir as primeiras issues.
-2. **Configuração do board:** criar colunas (Backlog, Refinamento, Em andamento, QA, Pronto) e importar as stories priorizadas (`SEC-04`, `SEC-03`, `SEC-01`, `DOC-01`, `DOC-03`, `SEC-QW`).
-3. **Preparação técnica:** garantir acesso ao KMS/Vault e storage S3/MinIO em staging, bem como contas de provedores (SES/SendGrid, Twilio/Zenvia) para evitar bloqueios durante as primeiras sprints.
-4. **Definição das squads:** confirmar composição das duas squads, responsáveis pelos épicos legais/internos (Squad Plataforma) e experiência/UX (Squad Produto), alinhando cadência de dailies e cerimônias.
-5. **Checklist de segurança e compliance:** acionar revisão de segurança antes do rollout para beneficiárias e agendar tabletop exercise para processos de rotação de chaves e incidentes.
 
 ---
 
