@@ -10,11 +10,32 @@ export const createEnrollmentBodySchema = z.object({
   agreementAcceptance: z.record(z.string(), z.any()).optional(),
 });
 
-export const updateEnrollmentBodySchema = z.object({
-  status: enrollmentStatusSchema.optional(),
-  terminatedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  terminationReason: z.string().optional().nullable(),
-});
+export const updateEnrollmentBodySchema = z
+  .object({
+    status: enrollmentStatusSchema.optional(),
+    terminatedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    terminationReason: z.string().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'terminated') {
+      const reason = data.terminationReason?.trim();
+      if (!reason) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['terminationReason'],
+          message: 'terminationReason is required when status is terminated',
+        });
+      }
+
+      if (data.terminatedAt === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['terminatedAt'],
+          message: 'terminatedAt is required when status is terminated',
+        });
+      }
+    }
+  });
 
 export const enrollmentIdParamSchema = z.object({
   id: z.string().uuid(),

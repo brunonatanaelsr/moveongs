@@ -145,6 +145,25 @@ export async function updateEnrollment(id: string, params: {
     throw new NotFoundError('Enrollment not found');
   }
 
+  const normalizedTerminationReason = (() => {
+    if (typeof params.terminationReason === 'string') {
+      const trimmed = params.terminationReason.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    return params.terminationReason ?? null;
+  })();
+
+  if (params.status === 'terminated') {
+    if (!normalizedTerminationReason) {
+      throw new AppError('terminationReason is required when terminating an enrollment');
+    }
+
+    if (!params.terminatedAt) {
+      throw new AppError('terminatedAt is required when terminating an enrollment');
+    }
+  }
+
   await query(
     `update enrollments set
        status = coalesce($2, status),
@@ -152,7 +171,7 @@ export async function updateEnrollment(id: string, params: {
        termination_reason = coalesce($4, termination_reason),
        updated_at = now()
      where id = $1`,
-    [id, params.status ?? null, params.terminatedAt ?? null, params.terminationReason ?? null],
+    [id, params.status ?? null, params.terminatedAt ?? null, normalizedTerminationReason],
   );
 
   const enrollment = await getEnrollmentById(id);

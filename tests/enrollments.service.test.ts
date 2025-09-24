@@ -13,6 +13,7 @@ type EnrollmentRecordMock = {
   cohortCode: string | null;
   projectId: string;
   projectName: string;
+  status: 'active' | 'suspended' | 'terminated';
   attendance: {
     totalSessions: number;
     presentSessions: number;
@@ -48,6 +49,7 @@ describe('recordAttendance service', () => {
     cohortCode: 'TURMA-1',
     projectId: 'proj-1',
     projectName: 'Projeto Teste',
+    status: 'active',
     attendance: {
       totalSessions: 1,
       presentSessions: 1,
@@ -119,8 +121,12 @@ describe('recordAttendance service', () => {
         attendanceRate: 0.5,
       },
     };
-    getEnrollmentByIdMock.mockResolvedValueOnce(enrollment);
-    getEnrollmentByIdMock.mockResolvedValueOnce(lowAttendance);
+    getEnrollmentByIdMock.mockReset();
+    getEnrollmentByIdMock
+      .mockResolvedValueOnce(enrollment)
+      .mockResolvedValueOnce(enrollment)
+      .mockResolvedValueOnce(enrollment)
+      .mockResolvedValueOnce(lowAttendance);
 
     await recordAttendance({
       enrollmentId: enrollment.id,
@@ -167,5 +173,41 @@ describe('recordAttendance service', () => {
       totalSessions: lowAttendance.attendance.totalSessions,
       presentSessions: lowAttendance.attendance.presentSessions,
     });
+  });
+
+  it('rejects attendance for suspended enrollments', async () => {
+    getEnrollmentByIdMock.mockResolvedValueOnce({
+      ...enrollment,
+      status: 'suspended',
+    });
+
+    await expect(
+      recordAttendance({
+        enrollmentId: enrollment.id,
+        date: '2024-06-01',
+        present: true,
+        justification: null,
+      }),
+    ).rejects.toBeInstanceOf(AppError);
+
+    expect(upsertAttendanceMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects attendance for terminated enrollments', async () => {
+    getEnrollmentByIdMock.mockResolvedValueOnce({
+      ...enrollment,
+      status: 'terminated',
+    });
+
+    await expect(
+      recordAttendance({
+        enrollmentId: enrollment.id,
+        date: '2024-06-01',
+        present: true,
+        justification: null,
+      }),
+    ).rejects.toBeInstanceOf(AppError);
+
+    expect(upsertAttendanceMock).not.toHaveBeenCalled();
   });
 });
