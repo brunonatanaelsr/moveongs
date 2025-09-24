@@ -4,17 +4,24 @@ import { addWebhookSubscription, listWebhookSubscriptions, removeWebhookSubscrip
 import { createWebhookSchema, webhookIdParamSchema } from './schemas';
 
 const NOTIFICATION_ADMIN_ROLES = ['admin', 'coordenacao'];
+const NOTIFICATION_WEBHOOK_PERMISSION = ['notifications:manage_webhooks'] as const;
 
 export const notificationRoutes: FastifyPluginAsync = async (app) => {
+  const authorizationHandlers = [
+    app.authenticate,
+    app.authorize(NOTIFICATION_ADMIN_ROLES),
+    app.authorize({ permissions: [...NOTIFICATION_WEBHOOK_PERMISSION] }),
+  ];
+
   app.get('/notifications/webhooks', {
-    preHandler: [app.authenticate, app.authorize(NOTIFICATION_ADMIN_ROLES)],
+    preHandler: authorizationHandlers,
   }, async () => {
     const webhooks = listWebhookSubscriptions();
     return { data: webhooks };
   });
 
   app.post('/notifications/webhooks', {
-    preHandler: [app.authenticate, app.authorize(NOTIFICATION_ADMIN_ROLES)],
+    preHandler: authorizationHandlers,
   }, async (request, reply) => {
     const parsedBody = createWebhookSchema.safeParse(request.body);
     if (!parsedBody.success) {
@@ -26,7 +33,7 @@ export const notificationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete('/notifications/webhooks/:id', {
-    preHandler: [app.authenticate, app.authorize(NOTIFICATION_ADMIN_ROLES)],
+    preHandler: authorizationHandlers,
   }, async (request, reply) => {
     const params = webhookIdParamSchema.safeParse(request.params);
     if (!params.success) {

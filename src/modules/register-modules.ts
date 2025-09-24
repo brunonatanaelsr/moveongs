@@ -15,6 +15,8 @@ import { auditRoutes } from './audit/routes';
 import { evolutionRoutes } from './evolutions/routes';
 import { actionPlanRoutes } from './action-plans/routes';
 import { timelineRoutes } from './timeline/routes';
+import { notificationRoutes } from './notifications/routes';
+import { feedRoutes } from './feed/routes';
 
 
 export async function registerModules(app: FastifyInstance) {
@@ -26,6 +28,7 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(projectRoutes);
   await app.register(enrollmentRoutes);
   await app.register(analyticsRoutes);
+  await app.register(feedRoutes);
   await app.register(beneficiaryRoutes);
   await app.register(formRoutes);
   await app.register(consentRoutes);
@@ -34,5 +37,6 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(evolutionRoutes);
   await app.register(actionPlanRoutes);
   await app.register(timelineRoutes);
+  await app.register(notificationRoutes);
 
 }

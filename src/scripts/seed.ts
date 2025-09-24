@@ -41,6 +41,7 @@ const RESOURCE_SEED = [
   { slug: 'analytics', description: 'Relatórios e analytics' },
   { slug: 'consents', description: 'Termos e consentimentos LGPD/Imagem' },
   { slug: 'attachments', description: 'Anexos e arquivos enviados' },
+  { slug: 'notifications', description: 'Eventos e webhooks de notificações' },
   { slug: 'audit_logs', description: 'Trilha de auditoria' },
   { slug: 'evolutions', description: 'Registros de evolução/atendimentos' },
   { slug: 'action_plans', description: 'Planos de ação e tarefas' }
@@ -97,6 +98,8 @@ const PERMISSION_SEED = [
   { resource: 'attachments', action: 'read', scope: 'global', description: 'Visualizar anexos' },
   { resource: 'attachments', action: 'delete', scope: 'global', description: 'Remover anexos' },
 
+  { resource: 'notifications', action: 'manage_webhooks', scope: 'global', description: 'Gerenciar webhooks de notificações' },
+
   { resource: 'audit_logs', action: 'read', scope: 'global', description: 'Consultar trilha de auditoria' },
 
   { resource: 'evolutions', action: 'create', scope: 'global', description: 'Registrar evolução/atendimento' },
@@ -141,6 +144,7 @@ const ROLE_PERMISSION_MAP: Record<string, string[]> = {
     'attachments:upload',
     'attachments:read',
     'attachments:delete',
+    'notifications:manage_webhooks',
     'audit_logs:read',
     'evolutions:create',
     'evolutions:read',
