@@ -7,6 +7,7 @@ import { beneficiaryRoutes } from './beneficiaries/routes';
 import { userRoutes } from './users/routes';
 import { projectRoutes } from './projects/routes';
 import { enrollmentRoutes } from './enrollments/routes';
+import { certificateRoutes } from './certificates/routes';
 import { analyticsRoutes } from './analytics/routes';
 import { formRoutes } from './forms/routes';
 import { consentRoutes } from './consents/routes';
@@ -28,6 +29,7 @@ export async function registerModules(app: FastifyInstance) {
   await app.register(userRoutes);
   await app.register(projectRoutes);
   await app.register(enrollmentRoutes);
+  await app.register(certificateRoutes);
   await app.register(analyticsRoutes);
   await app.register(feedRoutes);
   await app.register(messageRoutes);

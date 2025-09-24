@@ -184,7 +184,17 @@ export async function updateEnrollment(id: string, params: {
 
 export async function getEnrollmentById(id: string): Promise<EnrollmentRecord | null> {
   const { rows } = await query(
-    `select e.*, b.full_name as beneficiary_name,
+    `select e.id,
+            e.beneficiary_id,
+            e.cohort_id,
+            e.status,
+            e.enrolled_at,
+            e.terminated_at,
+            e.termination_reason,
+            e.agreement_acceptance,
+            e.created_at,
+            e.updated_at,
+            b.full_name as beneficiary_name,
             c.code as cohort_code,
             c.project_id,
             p.name as project_name,
@@ -196,7 +206,10 @@ export async function getEnrollmentById(id: string): Promise<EnrollmentRecord | 
        join projects p on p.id = c.project_id
        left join attendance a on a.enrollment_id = e.id
       where e.id = $1
-      group by e.id, b.full_name, c.code, c.project_id, p.name`,
+      group by e.id, e.beneficiary_id, e.cohort_id, e.status, e.enrolled_at,
+               e.terminated_at, e.termination_reason, e.agreement_acceptance,
+               e.created_at, e.updated_at,
+               b.full_name, c.code, c.project_id, p.name`,
     [id],
   );
 
@@ -217,7 +230,17 @@ export async function listEnrollments(params: {
   offset: number;
 }): Promise<EnrollmentRecord[]> {
   const { rows } = await query(
-    `select e.*, b.full_name as beneficiary_name,
+    `select e.id,
+            e.beneficiary_id,
+            e.cohort_id,
+            e.status,
+            e.enrolled_at,
+            e.terminated_at,
+            e.termination_reason,
+            e.agreement_acceptance,
+            e.created_at,
+            e.updated_at,
+            b.full_name as beneficiary_name,
             c.code as cohort_code,
             c.project_id,
             p.name as project_name,
@@ -233,7 +256,10 @@ export async function listEnrollments(params: {
         and ($3::uuid is null or c.project_id = $3)
         and ($4::text is null or e.status = $4)
         and (($5::boolean is false) or e.status = 'active')
-      group by e.id, b.full_name, c.code, c.project_id, p.name
+      group by e.id, e.beneficiary_id, e.cohort_id, e.status, e.enrolled_at,
+               e.terminated_at, e.termination_reason, e.agreement_acceptance,
+               e.created_at, e.updated_at,
+               b.full_name, c.code, c.project_id, p.name
       order by e.enrolled_at desc
       limit $6 offset $7`,
     [
