@@ -2,473 +2,289 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { useMessageThreads, useThreadMessages } from '../hooks/useMessages';
+import type { MessageThread, ThreadMessage } from '../types/messages';
 
-interface Participant {
-  id: string;
-  name: string;
-  role: string;
-  avatar: string;
-  status: 'online' | 'offline' | 'busy';
+function formatDateTime(value: string) {
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(date);
+  } catch {
+    return '—';
+  }
 }
 
-interface MessageAttachment {
-  id: string;
-  name: string;
-  size: string;
-  type: 'document' | 'image' | 'spreadsheet';
+function formatRelative(value: string) {
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.round(diffMs / 60000);
+    if (diffMinutes < 1) {
+      return 'agora';
+    }
+    if (diffMinutes < 60) {
+      return `${diffMinutes} min atrás`;
+    }
+    const diffHours = Math.round(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `${diffHours} h atrás`;
+    }
+    const diffDays = Math.round(diffHours / 24);
+    return `${diffDays} dia${diffDays > 1 ? 's' : ''} atrás`;
+  } catch {
+    return '—';
+  }
 }
 
-interface Message {
-  id: string;
-  senderId: string;
-  content: string;
-  timestamp: string;
-  attachments?: MessageAttachment[];
-  delivery?: 'enviado' | 'entregue' | 'lido';
+function ThreadListItem({
+  thread,
+  isActive,
+  onSelect,
+}: {
+  thread: MessageThread;
+  isActive: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(thread.id)}
+      className={clsx(
+        'group flex flex-col gap-2 rounded-2xl border px-4 py-3 text-left transition',
+        isActive
+          ? 'border-imm-emerald/60 bg-imm-emerald/10 text-white shadow-inner shadow-imm-emerald/30'
+          : 'border-white/10 bg-white/0 text-white/80 hover:border-white/30 hover:bg-white/10 hover:text-white',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-white">
+          {thread.subject || 'Sem assunto'}
+        </span>
+        <span className="text-xs uppercase tracking-wide text-white/50">
+          {thread.scope}
+        </span>
+      </div>
+      <p className="text-xs text-white/60">
+        Criado por {thread.createdBy.name ?? 'Usuário sem nome'} em {formatDateTime(thread.createdAt)}
+      </p>
+      <div className="flex flex-wrap gap-2 text-[11px] text-white/50">
+        {thread.members.map((member) => (
+          <span key={member.id} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5">
+            {member.name ?? 'Sem identificação'}
+          </span>
+        ))}
+        {thread.members.length === 0 && <span className="text-white/40">Sem participantes adicionais</span>}
+      </div>
+    </button>
+  );
 }
 
-interface MessageThread {
-  id: string;
-  subject: string;
-  participants: Participant[];
-  lastActivity: string;
-  unreadCount: number;
-  channel: 'Equipe Social' | 'Coordenação' | 'Diretoria';
-  messages: Message[];
-}
-
-const THREADS: MessageThread[] = [
-  {
-    id: 't1',
-    subject: 'Plano de ação Maria S.',
-    participants: [
-      { id: '1', name: 'Ana Costa', role: 'Assistente Social', avatar: 'AC', status: 'online' },
-      { id: '2', name: 'João Pereira', role: 'Psicólogo', avatar: 'JP', status: 'busy' },
-      { id: '3', name: 'Clara Lima', role: 'Coordenação', avatar: 'CL', status: 'offline' },
-    ],
-    lastActivity: 'há 2 min',
-    unreadCount: 3,
-    channel: 'Equipe Social',
-    messages: [
-      {
-        id: 'm1',
-        senderId: '1',
-        content:
-          'Equipe, segue atualização da visita domiciliar. Precisamos validar encaminhamento para reforço escolar e acompanhamento psicológico.',
-        timestamp: '09:12',
-      },
-      {
-        id: 'm2',
-        senderId: '2',
-        content:
-          'Validei com a família e podemos iniciar as sessões na próxima terça. Documento de autorização anexado para assinatura digital.',
-        attachments: [
-          { id: 'a1', name: 'autorizacao_sessoes.pdf', size: '320 KB', type: 'document' },
-        ],
-        timestamp: '09:25',
-        delivery: 'entregue',
-      },
-      {
-        id: 'm3',
-        senderId: '3',
-        content:
-          'Perfeito! Incluam também o reforço com a educadora Juliana. Atualizei o plano no painel e gerei tarefa para acompanhamento.',
-        timestamp: '09:28',
-        delivery: 'lido',
-      },
-    ],
-  },
-  {
-    id: 't2',
-    subject: 'Checklist evento comunitário',
-    participants: [
-      { id: '4', name: 'Fernanda Alves', role: 'Mobilização', avatar: 'FA', status: 'online' },
-      { id: '5', name: 'Rafael Nogueira', role: 'Comunicação', avatar: 'RN', status: 'online' },
-      { id: '6', name: 'Equipe Parceiros', role: 'Parceiros', avatar: 'EP', status: 'offline' },
-    ],
-    lastActivity: 'há 35 min',
-    unreadCount: 0,
-    channel: 'Coordenação',
-    messages: [
-      {
-        id: 'm4',
-        senderId: '4',
-        content: 'Checklist atualizado com logística e alimentação. Confiram se algo falta.',
-        timestamp: '08:40',
-      },
-      {
-        id: 'm5',
-        senderId: '5',
-        content: 'Adicionei banner oficial e programação em PDF.',
-        attachments: [
-          { id: 'a2', name: 'programacao_evento.pdf', size: '1.2 MB', type: 'document' },
-          { id: 'a3', name: 'arte_banner.png', size: '840 KB', type: 'image' },
-        ],
-        timestamp: '08:52',
-        delivery: 'enviado',
-      },
-    ],
-  },
-  {
-    id: 't3',
-    subject: 'Indicadores semanais - resumo',
-    participants: [
-      { id: '7', name: 'Diretoria IM', role: 'Diretoria', avatar: 'DI', status: 'offline' },
-      { id: '3', name: 'Clara Lima', role: 'Coordenação', avatar: 'CL', status: 'offline' },
-    ],
-    lastActivity: 'ontem',
-    unreadCount: 1,
-    channel: 'Diretoria',
-    messages: [
-      {
-        id: 'm6',
-        senderId: '3',
-        content: 'Resumo enviado para aprovação. Destaque para aumento de presença no projeto Movimento.',
-        timestamp: '18:16',
-      },
-      {
-        id: 'm7',
-        senderId: '7',
-        content: 'Ótimo trabalho! Vou apresentar na reunião com conselhos.',
-        timestamp: '18:34',
-        delivery: 'lido',
-      },
-    ],
-  },
-];
-
-function PresenceIndicator({ status }: { status: Participant['status'] }) {
-  const colors: Record<Participant['status'], string> = {
-    online: 'bg-emerald-400 shadow-[0_0_12px] shadow-emerald-400/60',
-    busy: 'bg-amber-400 shadow-[0_0_12px] shadow-amber-400/60',
-    offline: 'bg-slate-500',
-  };
-
-  return <span className={clsx('inline-flex h-2.5 w-2.5 rounded-full', colors[status])} />;
+function MessageBubble({ message }: { message: ThreadMessage }) {
+  const confidentiality = message.isConfidential ? 'Confidencial' : 'Interno';
+  return (
+    <article className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <header className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+        <span className="font-semibold text-white">{message.author.name ?? 'Usuário'}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5">{confidentiality}</span>
+          <span>{formatRelative(message.createdAt)}</span>
+        </div>
+      </header>
+      <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">{message.body}</p>
+    </article>
+  );
 }
 
 export function MessageCenter() {
-  const [selectedThreadId, setSelectedThreadId] = useState(THREADS[0].id);
-  const [channelFilter, setChannelFilter] = useState<'Todos' | MessageThread['channel']>('Todos');
+  const { threads, isLoading: threadsLoading, error: threadsError } = useMessageThreads();
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [scopeFilter, setScopeFilter] = useState<'all' | string>('all');
 
-  const channels = useMemo(
-    () => Array.from(new Set(THREADS.map((thread) => thread.channel))) as MessageThread['channel'][],
-    [],
-  );
+  const scopes = useMemo(() => {
+    const unique = new Set<string>();
+    threads.forEach((thread) => {
+      if (thread.scope) {
+        unique.add(thread.scope);
+      }
+    });
+    return Array.from(unique).sort();
+  }, [threads]);
 
   const filteredThreads = useMemo(() => {
-    if (channelFilter === 'Todos') {
-      return THREADS;
+    if (scopeFilter === 'all') {
+      return threads;
     }
-
-    return THREADS.filter((thread) => thread.channel === channelFilter);
-  }, [channelFilter]);
+    return threads.filter((thread) => thread.scope === scopeFilter);
+  }, [threads, scopeFilter]);
 
   useEffect(() => {
     if (filteredThreads.length === 0) {
+      setSelectedThreadId(null);
       return;
     }
-
-    const isSelectedVisible = filteredThreads.some((thread) => thread.id === selectedThreadId);
-    if (!isSelectedVisible) {
+    if (!selectedThreadId || !filteredThreads.some((thread) => thread.id === selectedThreadId)) {
       setSelectedThreadId(filteredThreads[0].id);
     }
   }, [filteredThreads, selectedThreadId]);
 
-  const selectedThread = useMemo(
-    () => filteredThreads.find((thread) => thread.id === selectedThreadId) ?? filteredThreads[0] ?? THREADS[0],
-    [filteredThreads, selectedThreadId],
+  const { thread: selectedThread, messages, isLoading: threadLoading, error: threadError } = useThreadMessages(
+    selectedThreadId,
   );
 
-  const threadAttachments = useMemo(
-    () => selectedThread?.messages.flatMap((message) => message.attachments ?? []) ?? [],
-    [selectedThread],
-  );
-
-  const deliveryStats = useMemo(() => {
-    return selectedThread?.messages.reduce(
-      (acc, message) => {
-        if (message.delivery) {
-          acc[message.delivery] += 1;
-        }
-        return acc;
-      },
-      { enviado: 0, entregue: 0, lido: 0 },
-    );
-  }, [selectedThread]);
-
-  if (!selectedThread) {
-    return null;
-  }
+  const participants = selectedThread?.members ?? [];
+  const lastMessage = messages[messages.length - 1];
+  const activitySummary = lastMessage
+    ? `Última mensagem ${formatRelative(lastMessage.createdAt)}`
+    : selectedThread
+      ? `Criado em ${formatDateTime(selectedThread.createdAt)}`
+      : null;
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <article className="flex h-full flex-col rounded-3xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-black/20 backdrop-blur-3xl">
-        <header className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Mensagens internas</h2>
-            <p className="text-xs text-white/60">Threads com anexos, indicadores em tempo real e organização por canal.</p>
-          </div>
-          <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-medium text-emerald-300">Sincronizado</span>
-        </header>
+    <section className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur-3xl">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xl font-semibold text-white">Centro de mensagens internas</h2>
+          <p className="text-sm text-white/60">
+            Conversas protegidas entre equipes e projetos, sincronizadas com as permissões do RBAC.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
+          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1">
+            {threads.length} conversas
+          </span>
+          {activitySummary && (
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-white/60">{activitySummary}</span>
+          )}
+        </div>
+      </header>
 
-        <div className="mb-2 flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 text-xs uppercase tracking-wide text-white/60">
+        <span>Filtrar por escopo</span>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setChannelFilter('Todos')}
+            onClick={() => setScopeFilter('all')}
             className={clsx(
-              'rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide transition',
-              channelFilter === 'Todos'
+              'rounded-full border px-3 py-1 text-[11px] font-medium transition',
+              scopeFilter === 'all'
                 ? 'border-white/30 bg-white/10 text-white shadow-inner'
                 : 'border-white/10 bg-white/0 text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white',
             )}
           >
-            Todos os canais
+            Todos
           </button>
-          {channels.map((channel) => (
+          {scopes.map((scope) => (
             <button
-              key={channel}
+              key={scope}
               type="button"
-              onClick={() => setChannelFilter(channel)}
+              onClick={() => setScopeFilter(scope)}
               className={clsx(
-                'rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide transition',
-                channelFilter === channel
+                'rounded-full border px-3 py-1 text-[11px] font-medium transition',
+                scopeFilter === scope
                   ? 'border-white/30 bg-white/10 text-white shadow-inner'
                   : 'border-white/10 bg-white/0 text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white',
               )}
             >
-              {channel}
+              {scope}
             </button>
           ))}
         </div>
+      </div>
 
-        <div className="flex flex-col gap-2 overflow-y-auto pr-1">
+      {threadsError && (
+        <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+          Não foi possível carregar as conversas. Tente novamente mais tarde.
+        </div>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-3">
+          {threadsLoading && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">Carregando threads...</div>
+          )}
+          {!threadsLoading && filteredThreads.length === 0 && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+              Nenhuma conversa encontrada para o escopo selecionado.
+            </div>
+          )}
           {filteredThreads.map((thread) => (
-            <button
+            <ThreadListItem
               key={thread.id}
-              type="button"
-              onClick={() => setSelectedThreadId(thread.id)}
-              className={clsx(
-                'flex flex-col gap-2 rounded-2xl border border-transparent bg-white/0 p-3 text-left transition hover:border-white/20 hover:bg-white/10',
-                selectedThreadId === thread.id && 'border-white/30 bg-white/10 shadow-inner',
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-white/60">{thread.channel}</span>
-                <span className="text-xs text-white/50">{thread.lastActivity}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-white">{thread.subject}</h3>
-                {thread.unreadCount > 0 && (
-                  <span className="rounded-full bg-rose-500/80 px-2 text-[10px] font-medium uppercase tracking-wide text-white">
-                    {thread.unreadCount} novas
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {thread.participants.slice(0, 3).map((participant) => (
-                  <div key={participant.id} className="flex items-center gap-2 text-xs text-white/70">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-white">
-                      {participant.avatar}
-                    </span>
-                    <PresenceIndicator status={participant.status} />
-                  </div>
-                ))}
-              </div>
-            </button>
+              thread={thread}
+              isActive={thread.id === selectedThreadId}
+              onSelect={setSelectedThreadId}
+            />
           ))}
         </div>
-      </article>
 
-      <article className="flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur-3xl">
-        <header className="flex flex-col gap-4 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <span className="text-xs uppercase tracking-wide text-white/60">Thread ativa</span>
-            <h2 className="text-xl font-semibold text-white">{selectedThread.subject}</h2>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-white/70">
-            <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              Atualizações em tempo real
-            </span>
-            <span className="rounded-full bg-imm-indigo/10 px-3 py-1 text-imm-indigo-200">
-              {selectedThread.participants.length} participantes
-            </span>
-          </div>
-        </header>
+        <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          {threadLoading && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">Carregando mensagens...</div>
+          )}
+          {threadError && (
+            <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+              Falha ao carregar mensagens desta conversa.
+            </div>
+          )}
+          {!threadLoading && !threadError && !selectedThread && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+              Selecione uma conversa para visualizar as mensagens.
+            </div>
+          )}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="flex flex-col gap-6 overflow-y-auto">
-            {selectedThread.messages.map((message) => {
-              const sender = selectedThread.participants.find((participant) => participant.id === message.senderId);
-              return (
-                <div
-                  key={message.id}
-                  className="flex flex-col gap-2 rounded-2xl border border-white/5 bg-white/5 p-4 shadow-inner shadow-black/10"
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
-                        {sender?.avatar}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-white">{sender?.name}</p>
-                        <p className="text-[11px] uppercase tracking-wide text-white/50">{sender?.role}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-white/60">{message.timestamp}</span>
-                    {message.delivery && (
-                      <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide text-white/70">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        {message.delivery}
-                      </span>
-                    )}
+          {selectedThread && !threadLoading && !threadError && (
+            <>
+              <header className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">
+                      {selectedThread.subject || 'Conversa sem assunto'}
+                    </h3>
+                    <p className="text-xs text-white/60">
+                      Criada por {selectedThread.createdBy.name ?? 'Usuário'} em {formatDateTime(selectedThread.createdAt)}
+                    </p>
                   </div>
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-wide text-white/70">
+                    Visibilidade: {selectedThread.visibility}
+                  </span>
+                </div>
 
-                  <p className="text-sm text-white/80">{message.content}</p>
-
-                  {message.attachments && message.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {message.attachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80"
-                        >
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-imm-indigo/20 text-imm-indigo-100">
-                            {attachment.type === 'document' && '📄'}
-                            {attachment.type === 'image' && '🖼️'}
-                            {attachment.type === 'spreadsheet' && '📊'}
-                          </span>
-                          <div className="flex flex-col">
-                            <span className="font-medium text-white">{attachment.name}</span>
-                            <span className="text-[11px] uppercase tracking-wide text-white/50">{attachment.size}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="flex flex-wrap gap-2 text-xs text-white/70">
+                  {participants.length > 0 ? (
+                    participants.map((participant) => (
+                      <span key={participant.id} className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                        {participant.name ?? 'Sem identificação'}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-white/50">Nenhum outro participante listado</span>
                   )}
                 </div>
-              );
-            })}
+              </header>
 
-            <footer className="rounded-2xl border border-white/10 bg-white/0 p-4">
-              <span className="mb-2 block text-xs uppercase tracking-wide text-white/50">Enviar atualização</span>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <textarea
-                  rows={3}
-                  placeholder="Escreva uma mensagem para a equipe..."
-                  className="min-h-[90px] flex-1 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                />
-                <div className="flex flex-col justify-between gap-2">
-                  <button
-                    type="button"
-                    className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/0 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
-                  >
-                    <span>📎</span>
-                    Anexar
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-imm-emerald/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-imm-emerald/30 transition hover:bg-imm-emerald"
-                  >
-                    Enviar atualização
-                  </button>
-                </div>
-              </div>
-            </footer>
-          </div>
-
-          <aside className="flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/10 p-4">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-white/70">Participantes</h3>
-              <div className="flex flex-col gap-3">
-                {selectedThread.participants.map((participant) => (
-                  <div key={participant.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
-                        {participant.avatar}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-white">{participant.name}</p>
-                        <p className="text-[11px] uppercase tracking-wide text-white/50">{participant.role}</p>
-                      </div>
-                    </div>
-                    <PresenceIndicator status={participant.status} />
+              <section className="flex flex-col gap-3">
+                {messages.length === 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+                    Ainda não há mensagens nesta conversa.
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-white/70">Indicadores da thread</h3>
-              <div className="grid gap-2 text-xs text-white/70">
-                <span className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                  <span>Total de mensagens</span>
-                  <span className="text-sm font-semibold text-white">{selectedThread.messages.length}</span>
-                </span>
-                <span className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                  <span>Mensagens com anexos</span>
-                  <span className="text-sm font-semibold text-white">
-                    {selectedThread.messages.filter((message) => (message.attachments ?? []).length > 0).length}
-                  </span>
-                </span>
-                <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                  <span>Entregas</span>
-                  <div className="grid gap-1 text-[11px] uppercase tracking-wide text-white/60">
-                    <span className="flex items-center justify-between">
-                      <span>Enviadas</span>
-                      <span>{deliveryStats?.enviado ?? 0}</span>
-                    </span>
-                    <span className="flex items-center justify-between">
-                      <span>Entregues</span>
-                      <span>{deliveryStats?.entregue ?? 0}</span>
-                    </span>
-                    <span className="flex items-center justify-between">
-                      <span>Lidas</span>
-                      <span>{deliveryStats?.lido ?? 0}</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-white/70">Anexos recentes</h3>
-              <div className="flex flex-col gap-2 text-xs text-white/80">
-                {threadAttachments.length === 0 && (
-                  <span className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-white/60">
-                    Nenhum anexo enviado nesta thread ainda.
-                  </span>
                 )}
-                {threadAttachments.map((attachment) => (
-                  <div
-                    key={`${attachment.id}-${attachment.name}`}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">
-                        {attachment.type === 'document' && '📄'}
-                        {attachment.type === 'image' && '🖼️'}
-                        {attachment.type === 'spreadsheet' && '📊'}
-                      </span>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-white">{attachment.name}</span>
-                        <span className="text-[11px] uppercase tracking-wide text-white/50">{attachment.size}</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-full border border-white/10 bg-white/0 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-white/70 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
-                    >
-                      Baixar
-                    </button>
-                  </div>
+                {messages.map((message) => (
+                  <MessageBubble key={message.id} message={message} />
                 ))}
-              </div>
-            </div>
-          </aside>
+              </section>
+            </>
+          )}
         </div>
-      </article>
+      </div>
     </section>
   );
 }
