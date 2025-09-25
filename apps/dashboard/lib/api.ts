@@ -1,6 +1,6 @@
 'use client';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
 
 export async function fetchJson(path: string, params: Record<string, unknown> = {}, token?: string | null) {
   const search = new URLSearchParams();

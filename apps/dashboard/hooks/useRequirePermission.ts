@@ -10,7 +10,12 @@ export function useRequirePermission(required: string | string[]) {
   const requirements = Array.isArray(required) ? required : [required];
 
   useEffect(() => {
+    if (session === undefined) {
+      return;
+    }
+
     if (!session) {
+      router.replace('/login');
       return;
     }
 
