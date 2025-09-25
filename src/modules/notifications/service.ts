@@ -16,18 +16,24 @@ export type NotificationQueueJob =
     dedupeKey: string;
     eventId: string;
     payload: EmailNotificationPayload;
+    attemptsMade?: number;
+    retry?: (options: { delay: number }) => Promise<void>;
   }
   | {
     channel: 'whatsapp';
     dedupeKey: string;
     eventId: string;
     payload: WhatsAppNotificationPayload;
+    attemptsMade?: number;
+    retry?: (options: { delay: number }) => Promise<void>;
   }
   | {
     channel: 'webhook';
     dedupeKey: string;
     eventId: string;
     payload: WebhookJobPayload;
+    attemptsMade?: number;
+    retry?: (options: { delay: number }) => Promise<void>;
   };
 
 export type NotificationDeadLetter = {
@@ -90,6 +96,7 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
     return;
   }
 
+  const startTime = Date.now();
   switch (job.channel) {
     case 'email':
       await emailAdapter.send(job.payload);
@@ -100,45 +107,31 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
     case 'webhook':
       await webhookAdapter.send(job.payload);
       break;
-    default:
-      throw new Error(`Unsupported notification job channel ${(job as NotificationQueueJob).channel}`);
   }
+  const durationMs = Date.now() - startTime;
 
   state.processedJobKeys.add(job.dedupeKey);
+  metrics.recordSuccess(job.channel, durationMs);
 }, {
   concurrency: queueOptions.concurrency,
   maxAttempts: queueOptions.maxAttempts,
   backoffMs: queueOptions.backoffMs,
   onAttemptFailure: (error, job) => {
-    const notificationJob = job.payload;
-    if (notificationJob) {
-      const hasRetry = job.attempts < queueOptions.maxAttempts;
-      if (hasRetry) {
-        metrics.recordRetry(notificationJob.channel);
-      }
-    }
-    logger.warn({
-      error,
-      job: job.payload,
-      attempts: job.attempts,
-    }, 'Notification job attempt failed');
+    const attempts = job.attempts;
+    metrics.recordRetry(job.payload.channel);
+    logger.warn({ error, job, attempts }, 'Notification job attempt failed');
   },
   onError: (error, job) => {
-    const notificationJob = job.payload;
-    if (notificationJob) {
-      const entry: NotificationDeadLetter = {
-        id: randomUUID(),
-        job: notificationJob,
-        error: error instanceof Error ? error.message : String(error),
-        failedAt: new Date().toISOString(),
-        attempts: job.attempts,
-      };
-
-      state.deadLetterQueue.push(entry);
-      metrics.recordDeadLetter(notificationJob.channel);
-    }
-
-    logger.error({ error, jobPayload: job.payload }, 'Notification job failed after retries');
+    const entry: NotificationDeadLetter = {
+      id: randomUUID(),
+      job: job.payload,
+      error: error instanceof Error ? error.message : String(error),
+      failedAt: new Date().toISOString(),
+      attempts: job.attempts,
+    };
+    state.deadLetterQueue.push(entry);
+    metrics.recordDeadLetter(job.payload.channel);
+    logger.error({ error, job }, 'Notification job failed permanently');
   },
 });
 
@@ -159,9 +152,8 @@ export function publishNotificationEvent(event: NotificationEvent) {
       dedupeKey: buildJobKey('email', normalizedEvent.id, recipientsKey),
       eventId: normalizedEvent.id,
       payload: {
+        ...emailMessage,
         recipients,
-        subject: emailMessage.subject,
-        body: emailMessage.body,
         eventType: normalizedEvent.type,
         eventId: normalizedEvent.id,
       },
