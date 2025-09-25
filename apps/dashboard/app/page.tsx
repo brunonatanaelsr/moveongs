@@ -25,6 +25,10 @@ export default function DashboardPage() {
   const { filters, update, reset } = useDashboardFilters();
   const { overview, isLoading, error } = useAnalyticsOverview(filters);
 
+  if (session === undefined) {
+    return <LoadingState message="Verificando sessão..." />;
+  }
+
   if (!session) {
     return <LoadingState message="Verificando sessão..." />;
   }

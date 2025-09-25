@@ -2,7 +2,15 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import DashboardPage from '../app/page';
 
-const mockSession = { token: 'token', permissions: ['analytics:read'], roles: ['admin'] };
+const mockSession = {
+  token: 'token',
+  refreshToken: 'refresh',
+  refreshTokenExpiresAt: '2024-01-01T00:00:00.000Z',
+  permissions: ['analytics:read'],
+  roles: ['admin'],
+  projectScopes: [],
+  user: { id: '1', name: 'Admin', email: 'admin@example.com' },
+};
 const overviewMock = {
   kpis: {
     beneficiarias_ativas: 42,

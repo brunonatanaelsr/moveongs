@@ -1,46 +1,41 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-export type Session = {
-  token: string;
-  permissions: string[];
-  roles: string[];
-};
-
-const STORAGE_KEY = 'imm:session';
-
-type StoredSession = {
-  token?: string;
-  permissions?: string[];
-  roles?: string[];
-};
+import { SESSION_EVENT, SESSION_STORAGE_KEY, type Session, loadSession } from '../lib/session';
 
 export function useSession() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return;
-    }
+    setSession(loadSession());
 
-    try {
-      const parsed = JSON.parse(raw) as StoredSession;
-      if (parsed.token) {
-        setSession({
-          token: parsed.token,
-          permissions: parsed.permissions ?? [],
-          roles: parsed.roles ?? [],
-        });
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== SESSION_STORAGE_KEY) {
+        return;
       }
-    } catch (error) {
-      console.warn('Failed to parse stored session', error);
-    }
+      setSession(loadSession());
+    };
+
+    const handleSessionEvent = (event: Event) => {
+      const custom = event as CustomEvent<Session | null>;
+      if (custom.detail !== undefined) {
+        setSession(custom.detail);
+      } else {
+        setSession(loadSession());
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener(SESSION_EVENT, handleSessionEvent as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(SESSION_EVENT, handleSessionEvent as EventListener);
+    };
   }, []);
 
   return session;
