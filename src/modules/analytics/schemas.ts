@@ -19,5 +19,5 @@ export const analyticsProjectParamSchema = z.object({
 });
 
 export const exportQuerySchema = analyticsOverviewQuerySchema.extend({
-  format: z.enum(['csv', 'pdf']).default('csv'),
+  format: z.enum(['csv', 'pdf', 'xlsx']).default('csv'),
 });

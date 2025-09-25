@@ -9,7 +9,7 @@ import {
 import { resolveAnalyticsScope } from './utils';
 import { getAnalyticsOverview, getAnalyticsTimeseries, getProjectAnalytics } from './service';
 import type { TimeseriesMetric } from './service';
-import { exportAnalyticsCsv, exportAnalyticsPdf } from './export';
+import { exportAnalyticsCsv, exportAnalyticsPdf, exportAnalyticsXlsx } from './export';
 
 export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   const overviewGuard = { permissions: ['analytics:read', 'analytics:read:project'], strategy: 'any' as const };
@@ -70,6 +70,13 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
     if (parsed.data.format === 'pdf') {
       const { buffer, filename } = await exportAnalyticsPdf(filters);
       reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(buffer);
+    }
+
+    if (parsed.data.format === 'xlsx') {
+      const { buffer, filename } = await exportAnalyticsXlsx(filters);
+      reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
       return reply.send(buffer);
     }

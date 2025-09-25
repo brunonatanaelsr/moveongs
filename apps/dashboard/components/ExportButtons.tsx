@@ -12,13 +12,14 @@ interface ExportButtonsProps {
 
 export function ExportButtons({ filters }: ExportButtonsProps) {
   const session = useSession();
-  const [loading, setLoading] = useState<'csv' | 'pdf' | null>(null);
+  const [loading, setLoading] = useState<'csv' | 'pdf' | 'xlsx' | null>(null);
 
-  async function handleExport(format: 'csv' | 'pdf') {
+  async function handleExport(format: 'csv' | 'pdf' | 'xlsx') {
     if (!session) return;
     setLoading(format);
     try {
-      const filename = format === 'pdf' ? 'dashboard.pdf' : 'dashboard.csv';
+      const filename =
+        format === 'pdf' ? 'dashboard.pdf' : format === 'xlsx' ? 'dashboard.xlsx' : 'dashboard.csv';
       await downloadFile('/analytics/export', { ...filters, format }, session.token, filename);
     } catch (error) {
       console.error('Export failed', error);
@@ -38,6 +39,15 @@ export function ExportButtons({ filters }: ExportButtonsProps) {
         disabled={loading !== null}
       >
         {loading === 'csv' ? 'Exportando CSV...' : 'Exportar CSV'}
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() => handleExport('xlsx')}
+        disabled={loading !== null}
+      >
+        {loading === 'xlsx' ? 'Gerando XLSX...' : 'Exportar XLSX'}
       </Button>
       <Button
         type="button"
