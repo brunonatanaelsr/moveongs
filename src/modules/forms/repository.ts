@@ -9,6 +9,7 @@ import type {
   FormSubmissionRecord,
   FormSubmissionSummary,
   FormTemplateRecord,
+  FormTemplateRevisionRecord,
   ListSubmissionsFilters,
   ListTemplatesFilters,
   UpdateSubmissionParams,
@@ -23,6 +24,21 @@ function mapTemplateRow(row: any): FormTemplateRecord {
     schema: row.schema,
     status: row.status,
     publishedAt: row.published_at ? row.published_at.toISOString() : null,
+  };
+}
+
+function mapRevisionRow(row: any): FormTemplateRevisionRecord {
+  return {
+    id: row.id,
+    templateId: row.template_id,
+    formType: row.form_type,
+    schemaVersion: row.schema_version,
+    revision: Number(row.revision),
+    schema: row.schema,
+    status: row.status,
+    publishedAt: row.published_at ? row.published_at.toISOString() : null,
+    createdAt: row.created_at ? row.created_at.toISOString() : new Date().toISOString(),
+    createdBy: row.created_by ?? null,
   };
 }
 
@@ -145,6 +161,59 @@ function buildScopeCondition(
   return `${column} in (${placeholders.join(', ')})`;
 }
 
+async function getNextRevision(client: PoolClient, templateId: string): Promise<number> {
+  const { rows } = await client.query<{ next_revision: number }>(
+    `select coalesce(max(revision), 0) + 1 as next_revision
+       from form_template_revisions
+      where template_id = $1`,
+    [templateId],
+  );
+
+  return rows[0]?.next_revision ?? 1;
+}
+
+type TemplateRowForRevision = {
+  id: string;
+  form_type: string;
+  schema_version: string;
+  schema: unknown;
+  status: string;
+  published_at: Date | null;
+};
+
+async function recordTemplateRevision(
+  client: PoolClient,
+  row: TemplateRowForRevision,
+  actorId: string | null,
+): Promise<void> {
+  const revision = await getNextRevision(client, row.id);
+
+  await client.query(
+    `insert into form_template_revisions (
+        id,
+        template_id,
+        form_type,
+        schema_version,
+        revision,
+        schema,
+        status,
+        published_at,
+        created_by
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      randomUUID(),
+      row.id,
+      row.form_type,
+      row.schema_version,
+      revision,
+      row.schema,
+      row.status,
+      row.published_at,
+      actorId,
+    ],
+  );
+}
+
 export async function listFormTemplates(filters: ListTemplatesFilters): Promise<FormTemplateRecord[]> {
   const clauses: string[] = [];
   const values: unknown[] = [];
@@ -233,7 +302,10 @@ export async function createFormTemplate(params: CreateTemplateParams): Promise<
       [id, params.formType, params.schemaVersion, params.schema, status],
     );
 
-    return mapTemplateRow(rows[0]);
+    const row = rows[0];
+    await recordTemplateRevision(client, row, params.createdBy ?? null);
+
+    return mapTemplateRow(row);
   });
 }
 
@@ -244,23 +316,37 @@ export async function updateFormTemplate(id: string, params: UpdateTemplateParam
       throw new NotFoundError('Form template not found');
     }
 
-    const row = current.rows[0];
-    const schema = params.schema ?? row.schema;
-    const status = params.status ?? row.status;
-    const shouldUpdatePublishedAt = status === 'active' && row.status !== 'active';
+    const currentRow = current.rows[0];
+    const schema = params.schema ?? currentRow.schema;
+    const status = params.status ?? currentRow.status;
+    const shouldUpdatePublishedAt = status === 'active' && currentRow.status !== 'active';
 
-    await client.query(
+    const { rows } = await client.query(
       `update form_templates set
          schema = $2,
          status = $3,
          published_at = case when $4 then now() else published_at end
-       where id = $1`,
+       where id = $1
+       returning *`,
       [id, schema, status, shouldUpdatePublishedAt],
     );
 
-    const refreshed = await client.query('select * from form_templates where id = $1', [id]);
-    return mapTemplateRow(refreshed.rows[0]);
+    const updatedRow = rows[0];
+    await recordTemplateRevision(client, updatedRow, params.updatedBy ?? null);
+
+    return mapTemplateRow(updatedRow);
   });
+}
+
+export async function listTemplateRevisions(templateId: string): Promise<FormTemplateRevisionRecord[]> {
+  const { rows } = await query(
+    `select * from form_template_revisions
+      where template_id = $1
+      order by revision desc`,
+    [templateId],
+  );
+
+  return rows.map(mapRevisionRow);
 }
 
 export async function listSubmissionsByBeneficiary(filters: ListSubmissionsFilters): Promise<FormSubmissionSummary[]> {
