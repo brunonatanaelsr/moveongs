@@ -130,13 +130,18 @@ export async function saveFile(
     const env = getEnv();
     const client = await getS3Client();
     const key = buildS3Key(originalName);
+    const serverSideEncryption = resolveServerSideEncryption(env.S3_SERVER_SIDE_ENCRYPTION);
 
     const command = new PutObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: key,
       Body: buffer,
       ContentType: mimeType ?? undefined,
-      ServerSideEncryption: resolveServerSideEncryption(env.S3_SERVER_SIDE_ENCRYPTION),
+      ServerSideEncryption: serverSideEncryption,
+      SSEKMSKeyId:
+        serverSideEncryption === 'aws:kms'
+          ? env.PII_ENCRYPTION_KMS_KEY_ID ?? undefined
+          : undefined,
     });
 
     await client.send(command);
