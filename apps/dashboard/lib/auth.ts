@@ -67,9 +67,9 @@ export async function login(email: string, password: string): Promise<LoginRespo
       if (body?.message) {
         message = body.message;
       }
-    } catch (error) {
-      // ignore parse errors
-    }
+  } catch {
+    // ignore parse errors
+  }
     throw new Error(message);
   }
 

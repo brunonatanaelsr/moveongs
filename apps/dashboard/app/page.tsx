@@ -19,6 +19,7 @@ import { MessageCenter } from '../components/MessageCenter';
 import { InstitutionalFeed } from '../components/InstitutionalFeed';
 import { ActionPlanPanel } from '../components/ActionPlanPanel';
 import { formatCount, formatPercent } from '../utils/format';
+import { PrimarySidebar } from '../components/PrimarySidebar';
 
 export default function DashboardPage() {
   const session = useRequirePermission(['analytics:read', 'analytics:read:project']);
@@ -38,6 +39,7 @@ export default function DashboardPage() {
       title="Dashboard institucional"
       description="Acompanhe indicadores-chave, presença e consentimentos das beneficiárias do Instituto Move Marias."
       headerExtra={<ExportButtons filters={filters} />}
+      sidebar={<PrimarySidebar session={session} />}
     >
       <FiltersBar filters={filters} onChange={update} onReset={reset} />
 
