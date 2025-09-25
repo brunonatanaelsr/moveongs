@@ -23,13 +23,187 @@ provider "aws" {
 
 locals {
   name = "${var.project}-${var.environment}"
+}
 
-  env_map = merge({
-    NODE_ENV = "production"
-    HOST     = "0.0.0.0"
-    PORT     = tostring(var.container_port)
-    LOG_LEVEL = "info"
-  }, var.extra_environment)
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
+resource "aws_kms_key" "app" {
+  description             = "KMS key for ${local.name} application secrets and data"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "EnableRootPermissions"
+        Effect   = "Allow"
+        Principal = {
+          AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowSecretsManagerUseOfKey"
+        Effect = "Allow"
+        Principal = {
+          Service = "secretsmanager.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "secretsmanager.${var.aws_region}.amazonaws.com"
+          }
+        }
+      },
+      {
+        Sid    = "AllowS3UseOfKey"
+        Effect = "Allow"
+        Principal = {
+          Service = "s3.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource  = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.aws_region}.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "app" {
+  name          = "alias/${local.name}-app"
+  target_key_id = aws_kms_key.app.key_id
+}
+
+locals {
+  attachments_bucket_name = lower(replace("${local.name}-attachments", "_", "-"))
+}
+
+resource "aws_s3_bucket" "attachments" {
+  bucket = local.attachments_bucket_name
+
+  tags = {
+    Purpose = "attachments"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "attachments" {
+  bucket = aws_s3_bucket.attachments.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "attachments" {
+  bucket = aws_s3_bucket.attachments.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.app.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "attachments" {
+  bucket = aws_s3_bucket.attachments.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "attachments" {
+  bucket = aws_s3_bucket.attachments.id
+
+  rule {
+    id     = "abort-incomplete-multipart"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+data "aws_iam_policy_document" "attachments_bucket" {
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.attachments.arn,
+      "${aws_s3_bucket.attachments.arn}/*"
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  statement {
+    sid     = "DenyIncorrectEncryptionHeader"
+    effect  = "Deny"
+    actions = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.attachments.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+  }
+
+  statement {
+    sid     = "DenyUnencryptedUploads"
+    effect  = "Deny"
+    actions = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.attachments.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "attachments" {
+  bucket = aws_s3_bucket.attachments.id
+  policy = data.aws_iam_policy_document.attachments_bucket.json
 }
 
 module "vpc" {
@@ -191,6 +365,7 @@ resource "aws_cloudwatch_log_group" "api" {
 
 resource "aws_secretsmanager_secret" "jwt" {
   name = "${local.name}-jwt"
+  kms_key_id = aws_kms_key.app.arn
 }
 
 resource "aws_secretsmanager_secret_version" "jwt" {
@@ -211,6 +386,7 @@ locals {
 resource "aws_secretsmanager_secret" "database_url" {
   count = local.database_url != null ? 1 : 0
   name  = "${local.name}-database-url"
+  kms_key_id = aws_kms_key.app.arn
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
@@ -222,12 +398,32 @@ resource "aws_secretsmanager_secret_version" "database_url" {
 resource "aws_secretsmanager_secret" "redis_url" {
   count = local.redis_url != null ? 1 : 0
   name  = "${local.name}-redis-url"
+  kms_key_id = aws_kms_key.app.arn
 }
 
 resource "aws_secretsmanager_secret_version" "redis_url" {
   count        = local.redis_url != null ? 1 : 0
   secret_id    = aws_secretsmanager_secret.redis_url[0].id
   secret_string = local.redis_url
+}
+
+locals {
+  base_env = {
+    NODE_ENV  = "production"
+    HOST      = "0.0.0.0"
+    PORT      = tostring(var.container_port)
+    LOG_LEVEL = "info"
+  }
+
+  attachments_env = {
+    ATTACHMENTS_STORAGE        = "s3"
+    S3_BUCKET                  = aws_s3_bucket.attachments.bucket
+    S3_REGION                  = var.aws_region
+    S3_SERVER_SIDE_ENCRYPTION  = "aws:kms"
+    PII_ENCRYPTION_KMS_KEY_ID  = aws_kms_alias.app.arn
+  }
+
+  env_map = merge(local.base_env, local.attachments_env, var.extra_environment)
 }
 
 resource "aws_iam_role" "ecs_task_execution" {
@@ -253,9 +449,96 @@ resource "aws_iam_role_policy_attachment" "cloudwatch" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
 }
 
-resource "aws_iam_role_policy_attachment" "secrets" {
-  role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+locals {
+  secret_arns = concat(
+    [aws_secretsmanager_secret.jwt.arn],
+    [for secret in aws_secretsmanager_secret.database_url : secret.arn],
+    [for secret in aws_secretsmanager_secret.redis_url : secret.arn]
+  )
+}
+
+resource "aws_iam_role_policy" "execution_secrets" {
+  name = "${local.name}-execution-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = local.secret_arns
+      },
+      {
+        Effect   = "Allow"
+        Action   = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = aws_kms_key.app.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name = "${local.name}-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_data" {
+  name = "${local.name}-task-data"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:GetObjectAttributes",
+          "s3:GetObjectTagging",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.attachments.arn,
+          "${aws_s3_bucket.attachments.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext"
+        ]
+        Resource = aws_kms_key.app.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = local.secret_arns
+      }
+    ]
+  })
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -299,6 +582,7 @@ resource "aws_ecs_task_definition" "api" {
   cpu                      = tostring(var.cpu)
   memory                   = tostring(var.memory)
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {

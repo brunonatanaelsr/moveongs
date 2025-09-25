@@ -52,3 +52,18 @@ output "redis_url_secret_arn" {
   description = "ARN do secret com REDIS_URL"
   value       = try(aws_secretsmanager_secret.redis_url[0].arn, null)
 }
+
+output "kms_key_arn" {
+  description = "ARN da KMS key utilizada para segredos e anexos"
+  value       = aws_kms_key.app.arn
+}
+
+output "kms_alias_arn" {
+  description = "Alias ARN associado à KMS key"
+  value       = aws_kms_alias.app.arn
+}
+
+output "attachments_bucket_name" {
+  description = "Bucket S3 com anexos cifrados"
+  value       = aws_s3_bucket.attachments.bucket
+}

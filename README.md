@@ -37,6 +37,13 @@ Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT,
 * Variáveis essenciais já presentes em `.env.example` (`OTEL_*`, `LOG_LEVEL`, `OTEL_ENABLED`).
 * Requisições HTTP devolvem o header `x-request-id` e todos os logs carregam `correlation_id`, `trace_id` e `span_id`.
 
+### Segurança & privacidade
+
+* Campos PII/PHI são cifrados no banco com `pgcrypto` e chaves efêmeras geradas via AWS KMS (ver `PII_ENCRYPTION_KMS_KEY_ID`).
+* Secrets de aplicação vivem no AWS Secrets Manager com KMS dedicado (`alias/<projeto>-app`) e podem ser injetados via Vault local (`SECRET_VAULT_PATH`).
+* Respostas HTTP e logs passam por mascaramento automático (`maskSensitiveData`) para ocultar CPF, RG, tokens e contatos.
+* Anexos são armazenados em bucket S3 dedicado com criptografia `aws:kms`, versionamento e bloqueio total de acesso público.
+
 ## Ambientes via Docker Compose
 
 Arquivos de orquestração completos estão na pasta [`deploy/`](deploy/):
@@ -71,7 +78,8 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
 
 * Terraform modular em [`infra/terraform`](infra/terraform) provisiona VPC, ECS Fargate, RDS, ElastiCache, ALB e Route53.
 * Utilize os `terraform.tfvars` por ambiente (`environments/dev|staging|prod`) e ajuste `container_image`, secrets e dimensões conforme necessário.
-* Secrets sensíveis (JWT, DATABASE_URL, REDIS_URL) são armazenados no AWS Secrets Manager e injetados automaticamente na task definition.
+* Secrets sensíveis (JWT, DATABASE_URL, REDIS_URL) são armazenados no AWS Secrets Manager cifrados com KMS dedicada e injetados automaticamente na task definition.
+* Bucket `*-attachments` com versionamento, política `SecureTransport` e criptografia KMS é exposto via variáveis de ambiente (`ATTACHMENTS_STORAGE=s3`, `S3_BUCKET`, `S3_SERVER_SIDE_ENCRYPTION`).
 
 ## Scripts disponíveis
 
