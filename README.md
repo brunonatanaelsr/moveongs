@@ -1,6 +1,7 @@
 # IMM Backend (Move Marias)
 
 Backend do mini-ERP social do Instituto Move Marias. Entrega autenticação JWT, RBAC por papéis/permissões, cadastros de beneficiárias, módulos de projetos/matrículas, serviços de formulários e analytics.
+Consulte a especificação funcional & técnica completa (v0.1) em [`docs/specification.md`](docs/specification.md).
 
 ## Requisitos
 
