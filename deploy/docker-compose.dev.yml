@@ -25,6 +25,8 @@ services:
       OTEL_METRICS_EXPORT_INTERVAL_MS: 15000
       OTEL_METRICS_EXPORT_TIMEOUT_MS: 5000
       OTEL_TRACES_SAMPLER: parentbased_always_on
+      FORM_VERIFICATION_BASE_URL: http://localhost:3333/forms/verify
+      FORM_VERIFICATION_HASH_SECRET: dev-form-hash-secret-imm-change-me
     depends_on:
       postgres:
         condition: service_healthy

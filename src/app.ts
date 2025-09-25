@@ -20,8 +20,9 @@ import { startDataRetentionJob, stopDataRetentionJob } from './shared/security/r
 
 export async function createApp(): Promise<FastifyInstance> {
   const env = getEnv();
+  const shouldMaskResponses = env.RESPONSE_MASKING_ENABLED === 'true';
   const app = fastify({
-    logger: logger.child({ component: 'http' }),
+    loggerInstance: logger.child({ component: 'http' }),
     genReqId(request) {
       return (request.headers['x-request-id'] as string | undefined) ?? randomUUID();
     },
@@ -82,6 +83,10 @@ export async function createApp(): Promise<FastifyInstance> {
     reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
+
+    if (!shouldMaskResponses) {
+      return payload;
+    }
 
     const contentType = reply.getHeader('content-type');
     if (contentType && typeof payload === 'string' && contentType.toString().includes('application/json')) {

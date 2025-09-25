@@ -26,6 +26,12 @@ type FormTemplateRow = {
 const FORM_TEMPLATE_SEED: SeedFormTemplate[] = [
   { formType: 'anamnese_social', schemaVersion: 'v1', file: 'form.anamnese_social.v1.json' },
   { formType: 'ficha_evolucao', schemaVersion: 'v1', file: 'form.ficha_evolucao.v1.json' },
+  { formType: 'consentimentos', schemaVersion: 'v1', file: 'form.consentimentos.v1.json' },
+  { formType: 'declaracao_recibo', schemaVersion: 'v1', file: 'form.declaracao_recibo.v1.json' },
+  { formType: 'inscricao_projeto', schemaVersion: 'v1', file: 'form.inscricao_projeto.v1.json' },
+  { formType: 'plano_acao', schemaVersion: 'v1', file: 'form.plano_acao.v1.json' },
+  { formType: 'roda_da_vida', schemaVersion: 'v1', file: 'form.roda_da_vida.v1.json' },
+  { formType: 'visao_holistica', schemaVersion: 'v1', file: 'form.visao_holistica.v1.json' },
 ];
 
 const ROLE_SEED = [

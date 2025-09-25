@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
+import QRCode from 'qrcode';
 import { AppError, NotFoundError } from '../../shared/errors';
 import type {
   CreateSubmissionInput,
@@ -31,6 +33,9 @@ import {
   updateFormTemplate as updateFormTemplateRepository,
 } from './repository';
 import { getBeneficiaryById } from '../beneficiaries/repository';
+import { getEnv } from '../../config/env';
+import { logger } from '../../config/logger';
+import { assertFormPayloadValid, normalizeValidationError } from './validation';
 
 const execFileAsync = promisify(execFile);
 
@@ -75,6 +80,8 @@ export async function createSubmission(
     }
   }
 
+  ensureSignatureConsistency(input.signedBy, input.signedAt);
+
   const template = input.schemaVersion
     ? await getTemplateByTypeAndVersion(input.formType, input.schemaVersion)
     : await getLatestActiveTemplate(input.formType);
@@ -87,11 +94,21 @@ export async function createSubmission(
     throw new AppError('Form template is not active', 400);
   }
 
+  const schemaObject = ensureTemplateSchemaObject(template);
+  const payload = input.payload ?? {};
+
+  try {
+    assertFormPayloadValid(template.formType, template.schemaVersion, schemaObject, payload);
+  } catch (error) {
+    const { message, issues } = normalizeValidationError(error);
+    throw new AppError(message, 400, issues);
+  }
+
   const params: CreateSubmissionParams = {
     beneficiaryId: input.beneficiaryId,
     formType: template.formType,
     schemaVersion: template.schemaVersion,
-    payload: input.payload,
+    payload,
     signedBy: input.signedBy,
     signedAt: input.signedAt,
     attachments: input.attachments,
@@ -117,7 +134,34 @@ export async function updateSubmission(
   params: UpdateSubmissionParams,
   allowedProjectIds?: string[] | null,
 ): Promise<FormSubmissionRecord> {
-  await getSubmissionOrFail(id, allowedProjectIds);
+  ensureSignatureConsistency(params.signedBy, params.signedAt);
+
+  const submission = await getSubmissionOrFail(id, allowedProjectIds);
+
+  const template = submission.template
+    ? submission.template
+    : await getTemplateByTypeAndVersion(submission.formType, submission.schemaVersion);
+
+  if (!template) {
+    throw new AppError('Form template not found for submission', 404);
+  }
+
+  if (template.status !== 'active') {
+    throw new AppError('Form template is not active', 400);
+  }
+
+  const schemaObject = ensureTemplateSchemaObject(template);
+
+  if (params.payload !== undefined) {
+    const payload = params.payload ?? {};
+    try {
+      assertFormPayloadValid(template.formType, template.schemaVersion, schemaObject, payload);
+    } catch (error) {
+      const { message, issues } = normalizeValidationError(error);
+      throw new AppError(message, 400, issues);
+    }
+  }
+
   return updateFormSubmissionRepository(id, params);
 }
 
@@ -140,12 +184,8 @@ export async function generateSubmissionPdf(
     throw new AppError('Form template is not active', 400);
   }
 
-  if (!isPlainObject(template.schema)) {
-    throw new AppError('Form template schema is invalid', 400);
-  }
-
-  const schemaObject = template.schema as Record<string, unknown>;
-  const pdfData = buildSubmissionPdfData(submission, template, schemaObject);
+  const schemaObject = ensureTemplateSchemaObject(template);
+  const pdfData = await buildSubmissionPdfData(submission, template, schemaObject);
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'imm-form-'));
   try {
@@ -179,6 +219,12 @@ type PdfSection = {
   entries: string[];
 };
 
+type SubmissionVerificationData = {
+  hash: string;
+  url: string | null;
+  qrCodeDataUrl: string | null;
+};
+
 type SubmissionPdfData = {
   templateTitle: string;
   formType: string;
@@ -194,15 +240,17 @@ type SubmissionPdfData = {
   sections: PdfSection[];
   signatures: Array<{ name: string; signedAt: string | null }>;
   attachments: Array<{ fileName: string | null; mimeType: string | null }>;
+  verification: SubmissionVerificationData;
 };
 
-function buildSubmissionPdfData(
+async function buildSubmissionPdfData(
   submission: FormSubmissionRecord,
   template: FormTemplateRecord,
   schema: Record<string, unknown>,
-): SubmissionPdfData {
+): Promise<SubmissionPdfData> {
   const schemaNode = schema as JsonSchema;
   const sections = buildSectionsFromSchema(schemaNode, submission.payload ?? {});
+  const verification = await buildSubmissionVerification(submission, template);
 
   return {
     templateTitle: typeof schemaNode.title === 'string' ? schemaNode.title : humanizeKey(template.formType),
@@ -222,6 +270,7 @@ function buildSubmissionPdfData(
       fileName: attachment.fileName ?? attachment.url ?? null,
       mimeType: attachment.mimeType ?? null,
     })),
+    verification,
   };
 }
 
@@ -375,6 +424,14 @@ function buildSubmissionPdfFilename(submission: FormSubmissionRecord, template: 
   return `${parts.join('-')}.pdf`;
 }
 
+function ensureTemplateSchemaObject(template: FormTemplateRecord): Record<string, unknown> {
+  if (!isPlainObject(template.schema)) {
+    throw new AppError('Form template schema is invalid', 400);
+  }
+
+  return template.schema as Record<string, unknown>;
+}
+
 function sanitizeForFilename(value: string): string {
   return value
     .toLowerCase()
@@ -411,6 +468,102 @@ function humanizeKey(key: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function ensureSignatureConsistency(
+  signedBy: string[] | null | undefined,
+  signedAt: string[] | null | undefined,
+): void {
+  const providedSignedBy = signedBy !== undefined;
+  const providedSignedAt = signedAt !== undefined;
+
+  if (providedSignedBy !== providedSignedAt) {
+    throw new AppError('signedBy and signedAt must be provided together', 400);
+  }
+}
+
+async function buildSubmissionVerification(
+  submission: FormSubmissionRecord,
+  template: FormTemplateRecord,
+): Promise<SubmissionVerificationData> {
+  const env = getEnv();
+  const payloadForHash = submission.payload ?? {};
+  const content = {
+    submissionId: submission.id,
+    beneficiaryId: submission.beneficiaryId,
+    formType: template.formType,
+    schemaVersion: template.schemaVersion,
+    createdAt: submission.createdAt,
+    updatedAt: submission.updatedAt,
+    payload: payloadForHash,
+    signedBy: submission.signedBy ?? [],
+    signedAt: submission.signedAt ?? [],
+    attachments: submission.attachments ?? [],
+  };
+
+  const secret = env.FORM_VERIFICATION_HASH_SECRET ?? '';
+  const hash = createHash('sha256').update(secret).update(canonicalize(content)).digest('hex');
+
+  const verificationUrl = buildVerificationUrl(env.FORM_VERIFICATION_BASE_URL, submission.id, hash);
+
+  let qrCodeDataUrl: string | null = null;
+  if (verificationUrl) {
+    try {
+      qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        scale: 4,
+      });
+    } catch (error) {
+      logger.warn({ err: error, submissionId: submission.id }, 'failed to generate verification qr code');
+    }
+  }
+
+  return {
+    hash,
+    url: verificationUrl,
+    qrCodeDataUrl,
+  };
+}
+
+function buildVerificationUrl(baseUrl: string | undefined, submissionId: string, hash: string): string | null {
+  if (!baseUrl) {
+    return null;
+  }
+
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+  try {
+    const url = new URL(submissionId, normalizedBase);
+    url.searchParams.set('hash', hash);
+    return url.toString();
+  } catch {
+    return `${normalizedBase}${submissionId}?hash=${encodeURIComponent(hash)}`;
+  }
+}
+
+function canonicalize(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'null';
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalize(item)).join(',')}]`;
+  }
+
+  if (value instanceof Date) {
+    return canonicalize(value.toISOString());
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${canonicalize(val)}`).join(',')}}`;
+  }
+
+  return JSON.stringify(value);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

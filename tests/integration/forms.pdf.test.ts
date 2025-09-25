@@ -19,6 +19,7 @@ const { mem, adapter } = vi.hoisted(() => {
     implementation: () => randomUUIDFn(),
   });
   process.env.NODE_ENV = 'test';
+  process.env.RESPONSE_MASKING_ENABLED = 'false';
   process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-imm-123456789012345678901234567890';
   process.env.JWT_EXPIRES_IN = '1h';
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';

@@ -99,6 +99,7 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
 - `artifacts/policies.example.json` – exemplo de mapa de permissões para guards front/back.
 - `frontend_glass_ui_examples/` – componentes React (Tailwind) com visual “liquid glass” + `PermissionGuard`.
 - `tools/pdf-renderer/` – microserviço Node (Playwright + Handlebars) para gerar PDFs (ex.: recibos e dashboard).
+- Variáveis `FORM_VERIFICATION_BASE_URL` e `FORM_VERIFICATION_HASH_SECRET` habilitam QR codes e hashes de verificação nos PDFs assinados.
 - `apps/dashboard/` – esqueleto Next.js do dashboard institucional (filtros, gráficos, exportações CSV/PDF).
 - `src/modules/notifications` – fila de disparos externos (e-mail/WhatsApp) e webhooks configuráveis.
 
@@ -116,10 +117,12 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
   node render_pdf.js templates/dashboard_summary.hbs data.json out.pdf
   ```
 - Utilizado pelo endpoint `/analytics/export?format=pdf` via `src/modules/analytics/export.ts`.
+- Os formulários exportados agora trazem hash SHA-256 e QR code opcional apontando para `FORM_VERIFICATION_BASE_URL`; utilize `FORM_VERIFICATION_HASH_SECRET` para garantir integridade dos recibos.
 
 ## Testes
 
 - Backend: `npm test` (Vitest + pg-mem) cobre autenticação e rotas de analytics (RBAC, exportações, cache).
+- Ajuste `RESPONSE_MASKING_ENABLED=false` nos ambientes de teste/local caso precise validar respostas sem mascaramento automático de dados sensíveis; mantenha o padrão (`true`) em produção.
 - Dashboard: `apps/dashboard` possui testes com React Testing Library (`npm test` dentro do app).
 
 ## Notificações e webhooks
