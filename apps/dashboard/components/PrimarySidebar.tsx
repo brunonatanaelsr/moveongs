@@ -12,19 +12,29 @@ const NAVIGATION_ITEMS: { label: string; href: string; description: string }[] =
     description: 'Indicadores consolidados das beneficiárias e projetos.',
   },
   {
-    label: 'Projetos',
-    href: '/projects',
-    description: 'Gerencie turmas, capacidades e responsáveis.',
+    label: 'Onboarding',
+    href: '/onboarding',
+    description: 'Fluxo guiado de triagem, consentimentos e inscrições.',
   },
   {
-    label: 'Beneficiárias',
-    href: '/beneficiaries',
-    description: 'Acompanhe cadastros, presenças e planos de ação.',
+    label: 'Formulários',
+    href: '/forms',
+    description: 'Renderização dinâmica dos formulários JSON Schema.',
   },
   {
-    label: 'Mensagens',
-    href: '/messages',
-    description: 'Central unificada de comunicados institucionais.',
+    label: 'Inscrições',
+    href: '/enrollments',
+    description: 'Gerencie matrículas, turmas e lista de espera.',
+  },
+  {
+    label: 'Presenças',
+    href: '/attendance',
+    description: 'Registre assiduidade e justificativas em tempo real.',
+  },
+  {
+    label: 'Planos de ação',
+    href: '/action-plans',
+    description: 'Organize objetivos, tarefas e responsáveis por beneficiária.',
   },
 ];
 

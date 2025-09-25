@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import ExcelJS from 'exceljs';
 import { getAnalyticsOverview } from './service';
 import type { OverviewFilters } from './types';
 import type { OverviewResponse } from './service';
@@ -13,7 +13,7 @@ const execFileAsync = promisify(execFile);
 export async function exportAnalyticsCsv(filters: OverviewFilters): Promise<{ filename: string; content: string }> {
   const data = await getAnalyticsOverview(filters);
   const csv = buildCsv(data);
-  const filename = `analytics-${new Date().toISOString().slice(0,10)}.csv`;
+  const filename = `analytics-${new Date().toISOString().slice(0, 10)}.csv`;
   return { filename, content: csv };
 }
 
@@ -31,11 +31,142 @@ export async function exportAnalyticsPdf(filters: OverviewFilters): Promise<{ fi
     await execFileAsync('node', [renderer, templatePath, dataPath, outputPath], { env: process.env });
 
     const buffer = await fs.readFile(outputPath);
-    const filename = `analytics-${new Date().toISOString().slice(0,10)}.pdf`;
+    const filename = `analytics-${new Date().toISOString().slice(0, 10)}.pdf`;
     return { filename, buffer };
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+}
+
+export async function exportAnalyticsXlsx(filters: OverviewFilters): Promise<{ filename: string; buffer: Buffer }> {
+  const overview = await getAnalyticsOverview(filters);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Instituto Move Marias';
+  workbook.created = new Date();
+
+  const kpisSheet = workbook.addWorksheet('KPIs');
+  kpisSheet.columns = [
+    { header: 'Indicador', key: 'label', width: 40 },
+    { header: 'Valor', key: 'value', width: 20 },
+  ];
+  kpisSheet.addRows([
+    { label: 'Beneficiárias ativas', value: overview.kpis.beneficiarias_ativas },
+    { label: 'Novas beneficiárias', value: overview.kpis.novas_beneficiarias },
+    { label: 'Matrículas ativas', value: overview.kpis.matriculas_ativas },
+    { label: 'Assiduidade média', value: formatPercentage(overview.kpis.assiduidade_media) },
+    { label: 'Consentimentos pendentes', value: overview.kpis.consentimentos_pendentes },
+  ]);
+
+  const novasBeneficiariasSheet = workbook.addWorksheet('Série beneficiárias');
+  novasBeneficiariasSheet.columns = [
+    { header: 'Data', key: 'date', width: 18 },
+    { header: 'Quantidade', key: 'value', width: 18 },
+  ];
+  overview.series.novas_beneficiarias.forEach((item) => {
+    novasBeneficiariasSheet.addRow({ date: item.t, value: item.v });
+  });
+
+  const novasMatriculasSheet = workbook.addWorksheet('Série matrículas');
+  novasMatriculasSheet.columns = [
+    { header: 'Data', key: 'date', width: 18 },
+    { header: 'Quantidade', key: 'value', width: 18 },
+  ];
+  overview.series.novas_matriculas.forEach((item) => {
+    novasMatriculasSheet.addRow({ date: item.t, value: item.v });
+  });
+
+  const assiduidadeSheet = workbook.addWorksheet('Assiduidade média');
+  assiduidadeSheet.columns = [
+    { header: 'Data', key: 'date', width: 18 },
+    { header: 'Taxa', key: 'value', width: 18 },
+  ];
+  overview.series.assiduidade_media.forEach((item) => {
+    assiduidadeSheet.addRow({ date: item.t, value: formatPercentage(item.v) });
+  });
+
+  const categoriasSheet = workbook.addWorksheet('Categorias');
+  categoriasSheet.columns = [
+    { header: 'Categoria', key: 'category', width: 30 },
+    { header: 'Chave', key: 'key', width: 32 },
+    { header: 'Valor', key: 'value', width: 24 },
+    { header: 'Extra', key: 'extra', width: 24 },
+  ];
+  overview.categorias.assiduidade_por_projeto.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Assiduidade por projeto',
+      key: item.projeto,
+      value: formatPercentage(item.valor),
+    });
+  });
+  overview.categorias.vulnerabilidades.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Vulnerabilidades',
+      key: item.tipo,
+      value: item.qtd,
+    });
+  });
+  overview.categorias.faixa_etaria.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Faixa etária',
+      key: item.faixa,
+      value: item.qtd,
+    });
+  });
+  overview.categorias.bairros.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Bairros',
+      key: item.bairro,
+      value: item.qtd,
+    });
+  });
+  overview.categorias.capacidade_projeto.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Capacidade por projeto',
+      key: item.projeto,
+      value: item.ocupadas,
+      extra: item.capacidade,
+    });
+  });
+  overview.categorias.plano_acao_status.forEach((item) => {
+    categoriasSheet.addRow({
+      category: 'Plano de ação por status',
+      key: item.status,
+      value: item.qtd,
+    });
+  });
+
+  const listasSheet = workbook.addWorksheet('Listas críticas');
+  listasSheet.columns = [
+    { header: 'Lista', key: 'list', width: 32 },
+    { header: 'Beneficiária', key: 'beneficiary', width: 32 },
+    { header: 'Projeto', key: 'project', width: 26 },
+    { header: 'Turma/Tipo', key: 'group', width: 26 },
+    { header: 'Indicador', key: 'indicator', width: 18 },
+  ];
+  overview.listas.risco_evasao.forEach((item) => {
+    listasSheet.addRow({
+      list: 'Risco de evasão',
+      beneficiary: item.beneficiaria,
+      project: item.projeto,
+      group: item.turma,
+      indicator: formatPercentage(item.assiduidade),
+    });
+  });
+  overview.listas.consentimentos_pendentes.forEach((item) => {
+    listasSheet.addRow({
+      list: 'Consentimentos',
+      beneficiary: item.beneficiaria,
+      project: item.tipo,
+      group: item.desde,
+      indicator: '',
+    });
+  });
+
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const filename = `analytics-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+  return { filename, buffer };
 }
 
 function buildCsv(overview: OverviewResponse): string {

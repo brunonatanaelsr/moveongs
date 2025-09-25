@@ -223,4 +223,16 @@ describe('Analytics routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/pdf');
   });
+
+  it('exports XLSX successfully', async () => {
+    const token = await login(app, 'admin@imm.local', 'ChangeMe123!');
+    const response = await app.inject({
+      method: 'GET',
+      url: '/analytics/export?format=xlsx',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
 });
