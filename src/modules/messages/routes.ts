@@ -24,6 +24,8 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
     const threads = await listThreads({
       userId: request.user.sub,
       scope: parsed.data.scope,
+      search: parsed.data.search,
+      classifications: parsed.data.classifications,
     });
 
     return { data: threads };
@@ -45,6 +47,9 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       scope: parsed.data.scope,
       subject: parsed.data.subject ?? null,
       visibility: parsed.data.visibility,
+      classification: parsed.data.classification,
+      retentionExpiresAt: parsed.data.retentionExpiresAt ?? null,
+      searchTerms: parsed.data.searchTerms,
       memberIds: uniqueMemberIds,
       initialMessage: parsed.data.initialMessage,
       roles: request.user.roles ?? [],
@@ -113,6 +118,11 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       body: parsedBody.data.body,
       visibility: parsedBody.data.visibility,
       isConfidential: parsedBody.data.isConfidential,
+      classification: parsedBody.data.classification,
+      retentionExpiresAt: parsedBody.data.retentionExpiresAt ?? null,
+      mentions: parsedBody.data.mentions,
+      attachments: parsedBody.data.attachments,
+      searchTerms: parsedBody.data.searchTerms,
       roles: request.user.roles ?? [],
       permissions: request.user.permissions ?? [],
     });

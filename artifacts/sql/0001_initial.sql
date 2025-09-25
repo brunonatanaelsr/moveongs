@@ -217,6 +217,9 @@ create table if not exists threads (
   created_by uuid references users(id),
   subject text,
   visibility text default 'internal',
+  classification text default 'publico_interno',
+  retention_expires_at timestamptz,
+  search_terms text[] default '{}'::text[],
   created_at timestamptz default now()
 );
 
@@ -233,6 +236,11 @@ create table if not exists messages (
   body text not null,
   visibility text default 'internal',
   is_confidential boolean default false,
+  classification text default 'publico_interno',
+  retention_expires_at timestamptz,
+  mentions uuid[] default '{}'::uuid[],
+  attachment_ids uuid[] default '{}'::uuid[],
+  search_terms text[] default '{}'::text[],
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

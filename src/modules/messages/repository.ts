@@ -5,6 +5,7 @@ import { AppError } from '../../shared/errors';
 
 export type ThreadVisibility = 'internal' | 'project' | 'private';
 export type MessageVisibility = 'internal' | 'project' | 'private';
+export type RetentionClassification = 'publico_interno' | 'sensivel' | 'confidencial';
 
 export type ThreadMemberRecord = {
   id: string;
@@ -16,6 +17,9 @@ export type ThreadRecord = {
   scope: string;
   subject: string | null;
   visibility: ThreadVisibility;
+  classification: RetentionClassification;
+  retentionExpiresAt: string | null;
+  searchTerms: string[];
   createdAt: string;
   createdBy: {
     id: string;
@@ -34,6 +38,11 @@ export type MessageRecord = {
   body: string;
   visibility: MessageVisibility;
   isConfidential: boolean;
+  classification: RetentionClassification;
+  retentionExpiresAt: string | null;
+  mentions: string[];
+  attachments: string[];
+  searchTerms: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -49,6 +58,9 @@ function mapThreadRow(row: any): ThreadRecord {
     scope: row.scope,
     subject: row.subject ?? null,
     visibility: (row.visibility ?? 'internal') as ThreadVisibility,
+    classification: (row.classification ?? 'publico_interno') as RetentionClassification,
+    retentionExpiresAt: row.retention_expires_at ? toIso(row.retention_expires_at) : null,
+    searchTerms: Array.isArray(row.search_terms) ? row.search_terms : [],
     createdAt: toIso(row.created_at),
     createdBy: {
       id: row.created_by,
@@ -76,6 +88,11 @@ function mapMessageRow(row: any): MessageRecord {
     body: row.body,
     visibility: (row.visibility ?? 'internal') as MessageVisibility,
     isConfidential: Boolean(row.is_confidential),
+    classification: (row.classification ?? 'publico_interno') as RetentionClassification,
+    retentionExpiresAt: row.retention_expires_at ? toIso(row.retention_expires_at) : null,
+    mentions: Array.isArray(row.mentions) ? row.mentions : [],
+    attachments: Array.isArray(row.attachment_ids) ? row.attachment_ids : [],
+    searchTerms: Array.isArray(row.search_terms) ? row.search_terms : [],
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };
@@ -136,15 +153,27 @@ export async function createThread(params: {
   scope: string;
   subject: string | null;
   visibility: ThreadVisibility;
+  classification: RetentionClassification;
+  retentionExpiresAt: string | null;
+  searchTerms: string[];
   createdBy: string;
   memberIds: string[];
 }): Promise<string> {
   return withTransaction(async (client) => {
     const threadId = randomUUID();
     await client.query(
-      `insert into threads (id, scope, created_by, subject, visibility)
-       values ($1, $2, $3, $4, $5)` ,
-      [threadId, params.scope, params.createdBy, params.subject ?? null, params.visibility],
+      `insert into threads (id, scope, created_by, subject, visibility, classification, retention_expires_at, search_terms)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)` ,
+      [
+        threadId,
+        params.scope,
+        params.createdBy,
+        params.subject ?? null,
+        params.visibility,
+        params.classification,
+        params.retentionExpiresAt ? new Date(params.retentionExpiresAt) : null,
+        params.searchTerms ?? [],
+      ],
     );
     const memberIds = Array.from(new Set([...params.memberIds, params.createdBy]));
 
@@ -161,20 +190,46 @@ export async function createThread(params: {
   });
 }
 
-export async function listThreadsForUser(userId: string, scope?: string): Promise<ThreadRecord[]> {
-  const values: unknown[] = [userId];
+export async function listThreadsForUser(params: {
+  userId: string;
+  scope?: string;
+  search?: string;
+  classifications?: RetentionClassification[];
+}): Promise<ThreadRecord[]> {
+  const values: unknown[] = [params.userId];
   const conditions = ['tm.user_id = $1'];
 
-  if (scope) {
-    values.push(scope);
+  if (params.scope) {
+    values.push(params.scope);
     conditions.push(`t.scope = $${values.length}`);
   }
+
+  if (params.classifications && params.classifications.length > 0) {
+    values.push(params.classifications);
+    conditions.push(`t.classification = ANY($${values.length}::text[])`);
+  }
+
+  if (params.search && params.search.trim().length > 0) {
+    const normalized = `%${params.search.trim()}%`;
+    const subjectIndex = values.push(normalized);
+    const termIndex = values.push(normalized);
+    conditions.push(
+      `(coalesce(t.subject, '') ilike $${subjectIndex} or exists (
+         select 1 from unnest(coalesce(t.search_terms, '{}')) term where term ilike $${termIndex}
+       ))`,
+    );
+  }
+
+  const whereClause = conditions.join(' and ');
 
   const { rows } = await query(
     `select t.id,
             t.scope,
             t.subject,
             t.visibility,
+            t.classification,
+            t.retention_expires_at,
+            t.search_terms,
             t.created_at,
             t.created_by,
             creator.name as creator_name,
@@ -183,7 +238,7 @@ export async function listThreadsForUser(userId: string, scope?: string): Promis
        join thread_members tm on tm.thread_id = t.id
        join users creator on creator.id = t.created_by
   left join user_profiles cp on cp.user_id = creator.id
-      where ${conditions.join(' and ')}
+      where ${whereClause}
       order by t.created_at desc, t.id desc`,
     values,
   );
@@ -204,6 +259,9 @@ export async function getThreadById(threadId: string): Promise<ThreadRecord | nu
             t.scope,
             t.subject,
             t.visibility,
+            t.classification,
+            t.retention_expires_at,
+            t.search_terms,
             t.created_at,
             t.created_by,
             creator.name as creator_name,
@@ -244,6 +302,11 @@ export async function listMessages(threadId: string): Promise<MessageRecord[]> {
             m.body,
             m.visibility,
             m.is_confidential,
+            m.classification,
+            m.retention_expires_at,
+            m.mentions,
+            m.attachment_ids,
+            m.search_terms,
             m.created_at,
             m.updated_at,
             u.name as author_name,
@@ -267,6 +330,11 @@ export async function getMessageById(messageId: string): Promise<MessageRecord |
             m.body,
             m.visibility,
             m.is_confidential,
+            m.classification,
+            m.retention_expires_at,
+            m.mentions,
+            m.attachment_ids,
+            m.search_terms,
             m.created_at,
             m.updated_at,
             u.name as author_name,
@@ -291,12 +359,29 @@ export async function createMessage(params: {
   body: string;
   visibility: MessageVisibility;
   isConfidential: boolean;
+  classification: RetentionClassification;
+  retentionExpiresAt: string | null;
+  mentions: string[];
+  attachments: string[];
+  searchTerms: string[];
 }): Promise<MessageRecord> {
   const messageId = randomUUID();
   await query(
-    `insert into messages (id, thread_id, author_id, body, visibility, is_confidential)
-     values ($1, $2, $3, $4, $5, $6)` ,
-    [messageId, params.threadId, params.authorId, params.body, params.visibility, params.isConfidential],
+    `insert into messages (id, thread_id, author_id, body, visibility, is_confidential, classification, retention_expires_at, mentions, attachment_ids, search_terms)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)` ,
+    [
+      messageId,
+      params.threadId,
+      params.authorId,
+      params.body,
+      params.visibility,
+      params.isConfidential,
+      params.classification,
+      params.retentionExpiresAt ? new Date(params.retentionExpiresAt) : null,
+      params.mentions ?? [],
+      params.attachments ?? [],
+      params.searchTerms ?? [],
+    ],
   );
 
   const message = await getMessageById(messageId);
