@@ -16,6 +16,7 @@ import {
   getFormTemplateOrFail,
   getSubmissionOrFail,
   listFormTemplates,
+  listTemplateRevisions,
   listSubmissions,
   generateSubmissionPdf,
   updateFormTemplate,
@@ -59,7 +60,10 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsed.error.flatten());
     }
 
-    const template = await createFormTemplate(parsed.data);
+    const template = await createFormTemplate({
+      ...parsed.data,
+      createdBy: request.user?.sub ?? null,
+    });
     return reply.code(201).send({ template });
   });
 
@@ -88,8 +92,23 @@ export const formRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('Invalid body', 400, parsedBody.error.flatten());
     }
 
-    const template = await updateFormTemplate(parsedParams.data.id, parsedBody.data);
+    const template = await updateFormTemplate(parsedParams.data.id, {
+      ...parsedBody.data,
+      updatedBy: request.user?.sub ?? null,
+    });
     return { template };
+  });
+
+  app.get('/form-templates/:id/revisions', {
+    preHandler: [app.authenticate, app.authorize(TEMPLATE_READ_REQUIREMENTS)],
+  }, async (request) => {
+    const parsedParams = submissionIdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      throw new AppError('Invalid params', 400, parsedParams.error.flatten());
+    }
+
+    const revisions = await listTemplateRevisions(parsedParams.data.id);
+    return { data: revisions };
   });
 
   app.get('/beneficiaries/:id/forms', {

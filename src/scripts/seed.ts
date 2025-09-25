@@ -14,6 +14,15 @@ type SeedFormTemplate = {
   status?: 'active' | 'inactive';
 };
 
+type FormTemplateRow = {
+  id: string;
+  form_type: string;
+  schema_version: string;
+  schema: unknown;
+  status: string;
+  published_at: Date | null;
+};
+
 const FORM_TEMPLATE_SEED: SeedFormTemplate[] = [
   { formType: 'anamnese_social', schemaVersion: 'v1', file: 'form.anamnese_social.v1.json' },
   { formType: 'ficha_evolucao', schemaVersion: 'v1', file: 'form.ficha_evolucao.v1.json' },
@@ -487,7 +496,7 @@ async function seedFormTemplates() {
 
     if (existing.rowCount && existing.rowCount > 0) {
       const row = existing.rows[0];
-      await pool.query(
+      const { rows: updatedRows } = await pool.query<FormTemplateRow>(
         `update form_templates set
            schema = $2,
            status = $3,
@@ -496,9 +505,12 @@ async function seedFormTemplates() {
              when $3 <> 'active' then null
              else published_at
            end
-         where id = $1`,
+         where id = $1
+         returning id, form_type, schema_version, schema, status, published_at`,
         [row.id, schema, status],
       );
+      const updatedRow = updatedRows[0];
+      await recordSeedTemplateRevision(updatedRow);
       logger.info(
         { formType: template.formType, schemaVersion: template.schemaVersion },
         'updated seeded form template',
@@ -508,17 +520,54 @@ async function seedFormTemplates() {
 
     const id = randomUUID();
 
-    await pool.query(
+    const { rows: insertedRows } = await pool.query<FormTemplateRow>(
       `insert into form_templates (id, form_type, schema_version, schema, status, published_at)
-       values ($1, $2, $3, $4, $5, case when $5 = 'active' then now() else null end)`,
+       values ($1, $2, $3, $4, $5, case when $5 = 'active' then now() else null end)
+       returning id, form_type, schema_version, schema, status, published_at`,
       [id, template.formType, template.schemaVersion, schema, status],
     );
+    await recordSeedTemplateRevision(insertedRows[0]);
 
     logger.info(
       { formType: template.formType, schemaVersion: template.schemaVersion },
       'seeded form template',
     );
   }
+}
+
+async function recordSeedTemplateRevision(row: FormTemplateRow): Promise<void> {
+  const { rows } = await pool.query<{ next_revision: number }>(
+    `select coalesce(max(revision), 0) + 1 as next_revision
+       from form_template_revisions
+      where template_id = $1`,
+    [row.id],
+  );
+
+  const revision = rows[0]?.next_revision ?? 1;
+
+  await pool.query(
+    `insert into form_template_revisions (
+        id,
+        template_id,
+        form_type,
+        schema_version,
+        revision,
+        schema,
+        status,
+        published_at,
+        created_by
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, null)`,
+    [
+      randomUUID(),
+      row.id,
+      row.form_type,
+      row.schema_version,
+      revision,
+      row.schema,
+      row.status,
+      row.published_at,
+    ],
+  );
 }
 
 export async function seedDatabase() {

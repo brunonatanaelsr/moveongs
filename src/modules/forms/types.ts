@@ -7,6 +7,19 @@ export type FormTemplateRecord = {
   publishedAt: string | null;
 };
 
+export type FormTemplateRevisionRecord = {
+  id: string;
+  templateId: string;
+  formType: string;
+  schemaVersion: string;
+  revision: number;
+  schema: unknown;
+  status: string;
+  publishedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
 export type FormAttachment = {
   id?: string;
   fileName?: string | null;
@@ -45,11 +58,13 @@ export type CreateTemplateParams = {
   schemaVersion: string;
   schema: unknown;
   status?: string;
+  createdBy?: string | null;
 };
 
 export type UpdateTemplateParams = {
   schema?: unknown;
   status?: string;
+  updatedBy?: string | null;
 };
 
 export type ListSubmissionsFilters = {

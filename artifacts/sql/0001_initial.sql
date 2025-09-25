@@ -88,6 +88,23 @@ create table if not exists form_templates (
   unique (form_type, schema_version)
 );
 
+create table if not exists form_template_revisions (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references form_templates(id) on delete cascade,
+  form_type text not null,
+  schema_version text not null,
+  revision int not null,
+  schema jsonb not null,
+  status text not null,
+  published_at timestamptz,
+  created_at timestamptz default now(),
+  created_by uuid references users(id),
+  unique (template_id, revision)
+);
+
+create index if not exists form_template_revisions_lookup
+  on form_template_revisions (form_type, schema_version, revision desc);
+
 create table if not exists form_submissions (
   id uuid primary key default gen_random_uuid(),
   beneficiary_id uuid references beneficiaries(id) on delete cascade,

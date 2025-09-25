@@ -11,6 +11,7 @@ import type {
   FormSubmissionRecord,
   FormSubmissionSummary,
   FormTemplateRecord,
+  FormTemplateRevisionRecord,
   ListSubmissionsFilters,
   ListTemplatesFilters,
   UpdateSubmissionParams,
@@ -23,6 +24,7 @@ import {
   getLatestActiveTemplate,
   getTemplateById,
   getTemplateByTypeAndVersion,
+  listTemplateRevisions as listTemplateRevisionsRepository,
   listFormTemplates as listFormTemplatesRepository,
   listSubmissionsByBeneficiary,
   updateFormSubmission as updateFormSubmissionRepository,
@@ -37,11 +39,15 @@ export async function listFormTemplates(filters: ListTemplatesFilters): Promise<
 }
 
 export async function createFormTemplate(input: CreateTemplateParams): Promise<FormTemplateRecord> {
-  return createFormTemplateRepository(input);
+  return createFormTemplateRepository({ ...input, createdBy: input.createdBy ?? null });
 }
 
 export async function updateFormTemplate(id: string, input: UpdateTemplateParams): Promise<FormTemplateRecord> {
-  return updateFormTemplateRepository(id, input);
+  return updateFormTemplateRepository(id, { ...input, updatedBy: input.updatedBy ?? null });
+}
+
+export async function listTemplateRevisions(templateId: string): Promise<FormTemplateRevisionRecord[]> {
+  return listTemplateRevisionsRepository(templateId);
 }
 
 export async function getFormTemplateOrFail(id: string): Promise<FormTemplateRecord> {
