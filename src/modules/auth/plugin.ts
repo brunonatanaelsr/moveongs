@@ -15,6 +15,34 @@ function isAuthorizationOptions(requirement: AuthorizationRequirement): requirem
 
 export async function registerAuthDecorators(app: FastifyInstance) {
   app.decorate('authenticate', async (request) => {
+    const headers = request.headers as Record<string, string | string[] | undefined> & {
+      authorization?: string;
+    };
+    const rawHeaders = request.raw.headers as Record<string, string | string[] | undefined> & {
+      authorization?: string;
+    };
+
+    const findAuthorization = (source: Record<string, string | string[] | undefined>) => {
+      const entry = Object.entries(source).find(([key]) => key.toLowerCase() === 'authorization');
+      if (!entry) {
+        return undefined;
+      }
+
+      const [, value] = entry;
+      return Array.isArray(value) ? value[0] : value;
+    };
+
+    const normalizedAuthorization =
+      headers.authorization ??
+      rawHeaders.authorization ??
+      findAuthorization(headers) ??
+      findAuthorization(rawHeaders);
+
+    if (typeof normalizedAuthorization === 'string') {
+      Reflect.set(headers, 'authorization', normalizedAuthorization);
+      Reflect.set(rawHeaders, 'authorization', normalizedAuthorization);
+    }
+
     try {
       await request.jwtVerify();
     } catch {
