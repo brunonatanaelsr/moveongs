@@ -38,6 +38,11 @@ const overviewMock = {
   },
 };
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => '/',
+}));
+
 vi.mock('../hooks/useRequirePermission', () => ({
   useRequirePermission: vi.fn(() => mockSession),
 }));

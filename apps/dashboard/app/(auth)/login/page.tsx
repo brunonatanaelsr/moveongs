@@ -4,6 +4,10 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { login, mapLoginResponseToSession, type LoginMfaResponse, type LoginSuccessResponse } from '../../../lib/auth';
 import { saveSession } from '../../../lib/session';
+import { Card } from '../../../components/ui/card';
+import { Input } from '../../../components/ui/input';
+import { Button } from '../../../components/ui/button';
+import { Alert } from '../../../components/ui/alert';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,7 +54,7 @@ export default function LoginPage() {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md space-y-8 rounded-3xl border border-white/10 bg-white/5 p-10 backdrop-blur-3xl shadow-2xl shadow-black/30">
+        <Card className="w-full max-w-md space-y-8" padding="lg">
           <div className="space-y-2 text-center">
             <h1 className="text-3xl font-semibold tracking-tight text-white">Acessar painel IMM</h1>
             <p className="text-sm text-slate-200/70">Use suas credenciais institucionais para visualizar o dashboard.</p>
@@ -58,13 +62,10 @@ export default function LoginPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
-              <label className="block text-left text-sm font-medium text-slate-200" htmlFor="email">
-                E-mail institucional
-              </label>
-              <input
+              <Input
                 id="email"
                 type="email"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-400 focus:border-emerald-400/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                label="E-mail institucional"
                 placeholder="nome@movemarias.org"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -72,13 +73,10 @@ export default function LoginPage() {
                 disabled={isSubmitting}
               />
 
-              <label className="block text-left text-sm font-medium text-slate-200" htmlFor="password">
-                Senha
-              </label>
-              <input
+              <Input
                 id="password"
                 type="password"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-400 focus:border-emerald-400/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                label="Senha"
                 placeholder="Digite sua senha"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -87,35 +85,24 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && (
-              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                {error}
-              </div>
-            )}
+            {error && <Alert variant="error">{error}</Alert>}
 
             {pendingChallenge && (
-              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                <p className="font-medium">Verificação adicional necessária</p>
-                <p className="mt-1 text-amber-100/80">
-                  Um desafio de múltiplos fatores foi iniciado. Conclua a verificação via {pendingChallenge.methods.join(' ou ')}
-                  para continuar.
-                </p>
-              </div>
+              <Alert variant="warning" title="Verificação adicional necessária">
+                Um desafio de múltiplos fatores foi iniciado. Conclua a verificação via {pendingChallenge.methods.join(' ou ')}
+                para continuar.
+              </Alert>
             )}
 
-            <button
-              type="submit"
-              className="w-full rounded-2xl bg-emerald-500/90 px-4 py-3 text-base font-semibold text-emerald-950 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
-              disabled={isSubmitting}
-            >
+            <Button type="submit" fullWidth disabled={isSubmitting}>
               {isSubmitting ? 'Entrando...' : 'Entrar'}
-            </button>
+            </Button>
           </form>
 
           <p className="text-center text-xs text-slate-400">
             Dificuldades para entrar? Procure a coordenação IMM para redefinir sua senha ou habilitar MFA.
           </p>
-        </div>
+        </Card>
       </div>
     </div>
   );

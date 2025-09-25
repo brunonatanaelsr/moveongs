@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Filters } from '../types/analytics';
 import { downloadFile } from '../lib/api';
 import { useSession } from '../hooks/useSession';
+import { Button } from './ui/button';
 
 interface ExportButtonsProps {
   filters: Filters;
@@ -29,22 +30,25 @@ export function ExportButtons({ filters }: ExportButtonsProps) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         onClick={() => handleExport('csv')}
         disabled={loading !== null}
-        className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 disabled:opacity-60"
       >
         {loading === 'csv' ? 'Exportando CSV...' : 'Exportar CSV'}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="primary"
+        size="sm"
+        className="bg-imm-indigo/60 text-white shadow-indigo-500/30 hover:bg-imm-indigo/50 focus:ring-imm-indigo/40 disabled:bg-imm-indigo/40"
         onClick={() => handleExport('pdf')}
         disabled={loading !== null}
-        className="rounded-2xl border border-white/10 bg-imm-indigo/40 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 disabled:opacity-60"
       >
         {loading === 'pdf' ? 'Gerando PDF...' : 'Exportar PDF'}
-      </button>
+      </Button>
     </div>
   );
 }
