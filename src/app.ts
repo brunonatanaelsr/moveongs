@@ -21,7 +21,7 @@ import { startDataRetentionJob, stopDataRetentionJob } from './shared/security/r
 export async function createApp(): Promise<FastifyInstance> {
   const env = getEnv();
   const app = fastify({
-    logger: logger.child({ component: 'http' }),
+    logger: { level: env.LOG_LEVEL ?? 'info' },
     genReqId(request) {
       return (request.headers['x-request-id'] as string | undefined) ?? randomUUID();
     },

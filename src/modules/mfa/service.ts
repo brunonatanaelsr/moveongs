@@ -4,15 +4,13 @@ import {
   verifyRegistrationResponse,
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
-} from '@simplewebauthn/server/esm/index.js';
-import { isoBase64URL } from '@simplewebauthn/server/esm/helpers/iso/index.js';
-import type {
-  AuthenticationResponseJSON,
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-  RegistrationResponseJSON,
-  WebAuthnCredential as LibraryWebAuthnCredential,
-} from '@simplewebauthn/server/esm/types/index.js';
+  isoBase64URL,
+  type AuthenticationResponseJSON,
+  type PublicKeyCredentialCreationOptionsJSON,
+  type PublicKeyCredentialRequestOptionsJSON,
+  type RegistrationResponseJSON,
+  type WebAuthnCredential as LibraryWebAuthnCredential,
+} from '@simplewebauthn/server';
 
 import { getEnv } from '../../config/env';
 import { AppError } from '../../shared/errors';
