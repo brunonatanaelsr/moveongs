@@ -13,6 +13,7 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  RESPONSE_MASKING_ENABLED: z.enum(['true', 'false']).default('true'),
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('1d'),
@@ -62,6 +63,8 @@ const envSchema = z.object({
   WEBAUTHN_RP_ORIGIN: z.string().url().default('https://imm.local'),
   CONSENT_REVIEW_INTERVAL_DAYS: z.string().regex(/^[0-9]+$/).default('365'),
   CONSENT_REVIEW_NOTIFICATION_COOLDOWN_DAYS: z.string().regex(/^[0-9]+$/).default('30'),
+  FORM_VERIFICATION_BASE_URL: z.string().url().optional(),
+  FORM_VERIFICATION_HASH_SECRET: z.string().min(16).optional(),
 });
 
 type Env = z.infer<typeof envSchema>;

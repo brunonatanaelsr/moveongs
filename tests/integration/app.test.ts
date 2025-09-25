@@ -17,6 +17,7 @@ const { mem, adapter } = vi.hoisted(() => {
     implementation: () => randomUUID(),
   });
   process.env.NODE_ENV = 'test';
+  process.env.RESPONSE_MASKING_ENABLED = 'false';
   process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-imm-123456789012345678901234567890';
   process.env.JWT_EXPIRES_IN = '1h';
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';
@@ -357,6 +358,31 @@ describe('IMM API basics', () => {
       schemaVersion: 'v2',
     });
 
+    const invalidSubmission = await app.inject({
+      method: 'POST',
+      url: `/beneficiaries/${beneficiaryId}/forms`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        formType: 'ficha_evolucao',
+        schemaVersion: 'v1',
+        payload: {
+          descricao_atendimento: {
+            relato_sessao: 'Acompanhamento resumido.',
+          },
+        },
+      },
+    });
+
+    expect(invalidSubmission.statusCode).toBe(400);
+    expect(invalidSubmission.json()).toMatchObject({ message: 'Form payload validation failed' });
+    expect(invalidSubmission.json().details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'identificacao_atendimento' }),
+      ]),
+    );
+
     const getSubmission = await app.inject({
       method: 'GET',
       url: `/forms/${submission.id}`,
@@ -369,6 +395,20 @@ describe('IMM API basics', () => {
     expect(getSubmission.json().submission.template).toMatchObject({
       schemaVersion: 'v2',
     });
+
+    const inconsistentSignatureUpdate = await app.inject({
+      method: 'PATCH',
+      url: `/forms/${submission.id}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        signedBy: ['Admin IMM'],
+      },
+    });
+
+    expect(inconsistentSignatureUpdate.statusCode).toBe(400);
+    expect(inconsistentSignatureUpdate.json().message).toBe('signedBy and signedAt must be provided together');
 
     const updateSubmission = await app.inject({
       method: 'PATCH',

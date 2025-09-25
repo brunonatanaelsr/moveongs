@@ -74,3 +74,19 @@
   </ul>
 </section>
 {{/if}}
+
+<section class="imm-section imm-verification">
+  <div>
+    <h2>Verificação e Integridade</h2>
+    <p><strong>Hash criptográfico (SHA-256):</strong> {{verification.hash}}</p>
+    {{#if verification.url}}
+    <p><strong>Portal de verificação:</strong> {{verification.url}}</p>
+    {{/if}}
+  </div>
+  {{#if verification.qrCodeDataUrl}}
+  <div class="imm-qr">
+    <img src="{{verification.qrCodeDataUrl}}" alt="QR code de verificação" />
+    <div>Escaneie para validar o documento</div>
+  </div>
+  {{/if}}
+</section>
