@@ -70,15 +70,22 @@ const whatsappNumbers = (env.NOTIFICATIONS_WHATSAPP_NUMBERS ?? '')
 
 const webhookTimeoutMs = Number.parseInt(env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS, 10) || 5000;
 
-const processedJobKeys = new Set<string>();
-const deadLetterQueue: NotificationDeadLetter[] = [];
+type NotificationServiceState = {
+  processedJobKeys: Set<string>;
+  deadLetterQueue: NotificationDeadLetter[];
+};
+
+const state: NotificationServiceState = {
+  processedJobKeys: new Set<string>(),
+  deadLetterQueue: [],
+};
 
 const queueOptions: QueueOptions = env.NODE_ENV === 'test'
   ? { concurrency: 1, maxAttempts: 2, backoffMs: 25 }
   : { concurrency: 3, maxAttempts: 5, backoffMs: 1500 };
 
 const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
-  if (processedJobKeys.has(job.dedupeKey)) {
+  if (state.processedJobKeys.has(job.dedupeKey)) {
     metrics.recordDuplicate(job.channel);
     return;
   }
@@ -97,7 +104,7 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
       throw new Error(`Unsupported notification job channel ${(job as NotificationQueueJob).channel}`);
   }
 
-  processedJobKeys.add(job.dedupeKey);
+  state.processedJobKeys.add(job.dedupeKey);
 }, {
   concurrency: queueOptions.concurrency,
   maxAttempts: queueOptions.maxAttempts,
@@ -127,7 +134,7 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
         attempts: job.attempts,
       };
 
-      deadLetterQueue.push(entry);
+      state.deadLetterQueue.push(entry);
       metrics.recordDeadLetter(notificationJob.channel);
     }
 
@@ -204,8 +211,8 @@ export function resetNotificationDispatchHistory() {
   emailAdapter.reset();
   whatsappAdapter.reset();
   webhookAdapter.reset();
-  processedJobKeys.clear();
-  deadLetterQueue.length = 0;
+  state.processedJobKeys.clear();
+  state.deadLetterQueue.length = 0;
   metrics.reset();
 }
 
@@ -214,16 +221,16 @@ export function getNotificationMetricsSnapshot(): NotificationMetricsSnapshot {
 }
 
 export function getNotificationDeadLetters(): ReadonlyArray<NotificationDeadLetter> {
-  return deadLetterQueue;
+  return state.deadLetterQueue;
 }
 
 export function retryNotificationDeadLetter(id: string): boolean {
-  const index = deadLetterQueue.findIndex((entry) => entry.id === id);
+  const index = state.deadLetterQueue.findIndex((entry) => entry.id === id);
   if (index === -1) {
     return false;
   }
 
-  const [entry] = deadLetterQueue.splice(index, 1);
+  const [entry] = state.deadLetterQueue.splice(index, 1);
   metrics.recordRetry(entry.job.channel);
   notificationQueue.enqueue(entry.job);
   return true;
@@ -234,8 +241,13 @@ export const __testing = {
   whatsappAdapter,
   webhookAdapter,
   metrics,
-  processedJobKeys,
-  deadLetterQueue,
+  get processedJobKeys() {
+    return state.processedJobKeys;
+  },
+  get deadLetterQueue() {
+    return state.deadLetterQueue;
+  },
+  state,
 };
 
 function buildJobKey(channel: NotificationChannel, eventId: string, target: string): string {
