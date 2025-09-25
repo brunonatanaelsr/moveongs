@@ -1,16 +1,4 @@
 import { authenticator } from 'otplib';
-import {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-  isoBase64URL,
-  type AuthenticationResponseJSON,
-  type PublicKeyCredentialCreationOptionsJSON,
-  type PublicKeyCredentialRequestOptionsJSON,
-  type RegistrationResponseJSON,
-  type WebAuthnCredential as LibraryWebAuthnCredential,
-} from '@simplewebauthn/server';
 
 import { getEnv } from '../../config/env';
 import { AppError } from '../../shared/errors';
