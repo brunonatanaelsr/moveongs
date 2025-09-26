@@ -118,7 +118,9 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
   backoffMs: queueOptions.backoffMs,
   onAttemptFailure: (error, job) => {
     const attempts = job.attempts;
-    metrics.recordRetry(job.payload.channel);
+    if (job.attempts < queueOptions.maxAttempts) {
+      metrics.recordRetry(job.payload.channel);
+    }
     logger.warn({ error, job, attempts }, 'Notification job attempt failed');
   },
   onError: (error, job) => {
