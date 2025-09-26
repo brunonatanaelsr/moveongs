@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { useMessageThreads, useThreadMessages } from '../hooks/useMessages';
+import { useMessageThreads, usePostMessage, useThreadMessages } from '../hooks/useMessages';
+import { useSession } from '../hooks/useSession';
 import type { MessageThread, ThreadMessage } from '../types/messages';
 
 function formatDateTime(value: string) {
@@ -105,9 +106,12 @@ function MessageBubble({ message }: { message: ThreadMessage }) {
 }
 
 export function MessageCenter() {
-  const { threads, isLoading: threadsLoading, error: threadsError } = useMessageThreads();
+  const session = useSession();
+  const { threads, isLoading: threadsLoading, error: threadsError, mutate: mutateThreads } = useMessageThreads();
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [scopeFilter, setScopeFilter] = useState<'all' | string>('all');
+  const [messageBody, setMessageBody] = useState('');
+  const [isConfidential, setIsConfidential] = useState(false);
 
   const scopes = useMemo(() => {
     const unique = new Set<string>();
@@ -136,9 +140,97 @@ export function MessageCenter() {
     }
   }, [filteredThreads, selectedThreadId]);
 
-  const { thread: selectedThread, messages, isLoading: threadLoading, error: threadError } = useThreadMessages(
-    selectedThreadId,
-  );
+  const {
+    thread: selectedThread,
+    messages,
+    isLoading: threadLoading,
+    error: threadError,
+    mutate: mutateThreadMessages,
+  } = useThreadMessages(selectedThreadId);
+  const { sendMessage, status: postStatus, error: postError, isSending, resetStatus } = usePostMessage(selectedThreadId);
+
+  useEffect(() => {
+    setMessageBody('');
+    setIsConfidential(false);
+    resetStatus();
+  }, [selectedThreadId, resetStatus]);
+
+  useEffect(() => {
+    if (postStatus === 'success') {
+      const timeout = setTimeout(() => {
+        resetStatus();
+      }, 4000);
+      return () => clearTimeout(timeout);
+    }
+    return undefined;
+  }, [postStatus, resetStatus]);
+
+  const handleMessageBodyChange = (value: string) => {
+    if (postStatus !== 'idle') {
+      resetStatus();
+    }
+    setMessageBody(value);
+  };
+
+  const handleSendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!selectedThread || !selectedThreadId) {
+      return;
+    }
+
+    if (!session) {
+      return;
+    }
+
+    const trimmed = messageBody.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const confidential = isConfidential;
+    const nowIso = new Date().toISOString();
+    const optimisticMessage: ThreadMessage = {
+      id: `optimistic-${Date.now()}`,
+      threadId: selectedThreadId,
+      author: {
+        id: session?.user.id ?? 'current-user',
+        name: session?.user.name ?? 'Você',
+      },
+      body: trimmed,
+      visibility: selectedThread.visibility,
+      isConfidential: confidential,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const previousThreadData = {
+      thread: selectedThread,
+      messages,
+    } as { thread: MessageThread; messages: ThreadMessage[] };
+
+    mutateThreadMessages(
+      {
+        thread: selectedThread,
+        messages: [...messages, optimisticMessage],
+      },
+      false,
+    );
+
+    try {
+      await sendMessage({ body: trimmed, isConfidential: confidential });
+      setMessageBody('');
+      setIsConfidential(false);
+      mutateThreadMessages();
+      mutateThreads();
+    } catch (error) {
+      mutateThreadMessages(previousThreadData, false);
+      setMessageBody(trimmed);
+      setIsConfidential(confidential);
+    }
+  };
+
+  const disableSend = !messageBody.trim() || isSending || !selectedThread || !session;
 
   const participants = selectedThread?.members ?? [];
   const lastMessage = messages[messages.length - 1];
@@ -281,6 +373,68 @@ export function MessageCenter() {
                   <MessageBubble key={message.id} message={message} />
                 ))}
               </section>
+
+              <form
+                onSubmit={handleSendMessage}
+                className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4"
+              >
+                <label
+                  className="text-xs font-semibold uppercase tracking-[0.2em] text-white/50"
+                  htmlFor="message-center-input"
+                >
+                  Nova mensagem
+                </label>
+                <textarea
+                  id="message-center-input"
+                  value={messageBody}
+                  onChange={(event) => handleMessageBodyChange(event.target.value)}
+                  rows={4}
+                  disabled={isSending}
+                  className="w-full rounded-2xl border border-white/10 bg-transparent p-3 text-sm text-white placeholder:text-white/40 focus:border-cyan-300 focus:outline-none disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/40"
+                  placeholder="Compartilhe atualizações, anexos ou alertas operacionais..."
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (postStatus !== 'idle') {
+                        resetStatus();
+                      }
+                      setIsConfidential((prev) => !prev);
+                    }}
+                    className={clsx(
+                      'rounded-full border px-3 py-1 transition',
+                      isConfidential
+                        ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
+                        : 'border-white/10 bg-transparent text-white/70 hover:border-white/20 hover:bg-white/10 hover:text-white',
+                    )}
+                  >
+                    {isConfidential ? 'Confidencial ativado' : 'Marcar confidencial'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={disableSend}
+                    className={clsx(
+                      'rounded-full border px-4 py-2 text-sm font-semibold transition',
+                      disableSend
+                        ? 'cursor-not-allowed border-white/20 bg-white/10 text-white/60'
+                        : 'border-cyan-300/60 bg-cyan-500/20 text-white hover:bg-cyan-500/30',
+                    )}
+                  >
+                    {isSending ? 'Enviando...' : 'Enviar mensagem'}
+                  </button>
+                </div>
+                {postStatus === 'success' && (
+                  <p className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                    Mensagem enviada com sucesso.
+                  </p>
+                )}
+                {postStatus === 'error' && (
+                  <p className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                    {postError?.message ?? 'Não foi possível enviar a mensagem. Tente novamente.'}
+                  </p>
+                )}
+              </form>
             </>
           )}
         </div>
