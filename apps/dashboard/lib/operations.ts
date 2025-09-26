@@ -125,11 +125,27 @@ export type EnrollmentRecord = {
   agreementsAccepted: boolean | null;
   createdAt: string;
   updatedAt: string;
+  beneficiary?: BeneficiarySummary | null;
 };
 
 export type EnrollmentListResponse = {
   data: EnrollmentRecord[];
   meta: PaginationMeta;
+};
+
+export type AttendanceFormStatus = 'presente' | 'falta_justificada' | 'falta_injustificada' | 'atraso';
+
+export type AttendanceSubmissionPayload = {
+  enrollmentId: string;
+  beneficiaryId?: string;
+  date: string;
+  status: AttendanceFormStatus;
+  justification?: string;
+};
+
+export type AttendanceSubmissionResult = {
+  successes: number;
+  failures: Array<{ enrollmentId: string; error: Error }>;
 };
 
 export async function listBeneficiaries(params: PaginationParams, token?: string | null) {
@@ -236,7 +252,10 @@ export async function listProjectCohorts(projectId: string, token?: string | nul
   return Array.isArray(response?.data) ? (response.data as CohortRecord[]) : [];
 }
 
-export async function listEnrollments(params: PaginationParams & { projectId?: string; cohortId?: string }, token?: string | null) {
+export async function listEnrollments(
+  params: PaginationParams & { projectId?: string; cohortId?: string; status?: string; activeOnly?: boolean },
+  token?: string | null,
+) {
   const response = await fetchJson('/enrollments', params, token);
   const data = Array.isArray(response?.data) ? (response.data as EnrollmentRecord[]) : [];
   const meta = (response?.meta as PaginationMeta | undefined) ?? {
@@ -261,6 +280,47 @@ export async function updateEnrollment(
     token,
   );
   return response?.enrollment as EnrollmentRecord | undefined;
+}
+
+export async function submitAttendanceRecords(
+  records: AttendanceSubmissionPayload[],
+  token?: string | null,
+): Promise<AttendanceSubmissionResult> {
+  if (records.length === 0) {
+    return { successes: 0, failures: [] };
+  }
+
+  const settled = await Promise.allSettled(
+    records.map((record) => {
+      const present = record.status === 'presente' || record.status === 'atraso';
+      const justification = record.justification?.trim();
+      return recordAttendance(
+        record.enrollmentId,
+        {
+          date: record.date,
+          present,
+          justification: present && !justification ? null : justification ?? null,
+        },
+        token,
+      );
+    }),
+  );
+
+  return settled.reduce<AttendanceSubmissionResult>(
+    (accumulator, result, index) => {
+      if (result.status === 'fulfilled') {
+        return { ...accumulator, successes: accumulator.successes + 1 };
+      }
+
+      const failure: { enrollmentId: string; error: Error } = {
+        enrollmentId: records[index]?.enrollmentId ?? '',
+        error: result.reason instanceof Error ? result.reason : new Error(String(result.reason)),
+      };
+
+      return { ...accumulator, failures: [...accumulator.failures, failure] };
+    },
+    { successes: 0, failures: [] },
+  );
 }
 
 export async function recordAttendance(
