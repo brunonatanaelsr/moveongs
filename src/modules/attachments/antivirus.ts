@@ -1,7 +1,7 @@
 import { createConnection } from 'net';
 import { promisify } from 'util';
 import { readFile } from 'fs/promises';
-import { env } from '../../config/env';
+import { getEnv } from '../../config/env';
 import { logger } from '../../observability/logger';
 
 interface ScanResult {
@@ -25,12 +25,14 @@ export class AntivirusScanner {
   private readonly timeoutMs: number;
 
   constructor() {
+    const env = getEnv();
     this.host = env.ANTIVIRUS_HOST;
     this.port = parseInt(env.ANTIVIRUS_PORT, 10);
     this.timeoutMs = parseInt(env.ANTIVIRUS_TIMEOUT_MS, 10);
   }
 
   async scanFile(filePath: string): Promise<ScanResult> {
+    const env = getEnv();
     if (env.ANTIVIRUS_ENABLED !== 'true') {
       logger.debug('Antivirus scanning is disabled');
       return { isInfected: false, viruses: [] };
@@ -46,6 +48,7 @@ export class AntivirusScanner {
   }
 
   async scanBuffer(buffer: Buffer): Promise<ScanResult> {
+    const env = getEnv();
     if (env.ANTIVIRUS_ENABLED !== 'true') {
       logger.debug('Antivirus scanning is disabled');
       return { isInfected: false, viruses: [] };
@@ -122,6 +125,7 @@ export class AntivirusScanner {
   }
 
   async testConnection(): Promise<boolean> {
+    const env = getEnv();
     if (env.ANTIVIRUS_ENABLED !== 'true') {
       logger.debug('Antivirus scanning is disabled');
       return true;
