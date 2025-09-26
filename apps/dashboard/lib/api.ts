@@ -33,6 +33,29 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
   return response.text();
 }
 
+export async function postJson(path: string, body: unknown, token?: string | null) {
+  const url = `${API_URL}${path}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+    body: JSON.stringify(body ?? {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  const contentType = response.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+  return response.text();
+}
+
 export async function downloadFile(path: string, params: Record<string, unknown>, token: string, filename: string) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
