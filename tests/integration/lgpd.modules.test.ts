@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 60000 });
 
@@ -31,6 +31,11 @@ const { mem, adapter, tempUploadsDir } = vi.hoisted(() => {
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';
   process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? 'silent';
   process.env.UPLOADS_DIR = tempDir;
+  process.env.ANTIVIRUS_HOST = 'localhost';
+  process.env.ANTIVIRUS_PORT = '8080';
+  process.env.ANTIVIRUS_PROTOCOL = 'http';
+  process.env.ANTIVIRUS_SCAN_PATH = '/scan';
+  process.env.ANTIVIRUS_TIMEOUT_MS = '1000';
 
   return { mem: db, adapter, tempUploadsDir: tempDir };
 });
@@ -59,6 +64,14 @@ import {
 } from '../../src/modules/attachments/service';
 import { getEnv } from '../../src/config/env';
 
+vi.mock('../../src/modules/attachments/antivirus', () => ({
+  scanAttachment: vi.fn(),
+}));
+
+import { scanAttachment } from '../../src/modules/attachments/antivirus';
+
+const mockedScanAttachment = vi.mocked(scanAttachment);
+
 let client: PoolClient;
 
 async function createBeneficiary(): Promise<string> {
@@ -78,6 +91,7 @@ async function loadSchema() {
     path.join(__dirname, '../../artifacts/sql/0001_initial.sql'),
     path.join(__dirname, '../../artifacts/sql/0002_rbac_and_profiles.sql'),
     path.join(__dirname, '../../artifacts/sql/0006_mfa_consent_reviews_dsr.sql'),
+    path.join(__dirname, '../../artifacts/sql/0007_attachment_antivirus.sql'),
   ];
 
   for (const sqlPath of files) {
@@ -102,6 +116,15 @@ beforeAll(async () => {
   await loadSchema();
   await seedDatabase();
   client = await pool.connect();
+});
+
+beforeEach(() => {
+  mockedScanAttachment.mockResolvedValue({
+    status: 'clean',
+    signature: null,
+    scannedAt: new Date(),
+    message: null,
+  });
 });
 
 afterEach(async () => {
@@ -206,10 +229,17 @@ describe('LGPD modules', () => {
       ownerId,
       fileName: 'teste.txt',
       mimeType: 'text/plain',
+<<<<<<< HEAD
       scanStatus: 'skipped',
     });
     expect(attachment.scanSignature).toBeNull();
     expect(attachment.scanEngine).toBeNull();
+=======
+      antivirusScanStatus: 'clean',
+      antivirusScanMessage: null,
+    });
+    expect(attachment.antivirusScannedAt).toEqual(expect.any(String));
+>>>>>>> origin/codex/implementar-integracao-com-clamav
 
     const listed = await listOwnerAttachments({ ownerType: 'beneficiary', ownerId });
     expect(listed).toEqual(
@@ -228,5 +258,53 @@ describe('LGPD modules', () => {
 
     const auditEntries = await fetchAuditLogs({ entity: 'attachment', entityId: attachment.id });
     expect(auditEntries.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects uploads flagged by the antivirus', async () => {
+    mockedScanAttachment.mockResolvedValueOnce({
+      status: 'infected',
+      signature: 'Win.Test.EICAR',
+      scannedAt: new Date(),
+      message: 'EICAR test file detected',
+    });
+
+    await expect(
+      uploadAttachment({
+        ownerType: 'beneficiary',
+        ownerId: await createBeneficiary(),
+        buffer: Buffer.from('virus'),
+        filename: 'virus.txt',
+        mimeType: 'text/plain',
+        uploadedBy: await getAdminUserId(),
+      }),
+    ).rejects.toMatchObject({
+      message: 'Uploaded file blocked by antivirus',
+      statusCode: 422,
+      details: expect.objectContaining({ signature: 'Win.Test.EICAR' }),
+    });
+  });
+
+  it('persists antivirus failure status when scan cannot complete', async () => {
+    mockedScanAttachment.mockResolvedValueOnce({
+      status: 'error',
+      signature: null,
+      scannedAt: new Date(),
+      message: 'Scanner timeout',
+    });
+
+    const ownerId = await createBeneficiary();
+    const userId = await getAdminUserId();
+
+    const attachment = await uploadAttachment({
+      ownerType: 'beneficiary',
+      ownerId,
+      buffer: Buffer.from('Conteúdo qualquer'),
+      filename: 'fallback.txt',
+      mimeType: 'text/plain',
+      uploadedBy: userId,
+    });
+
+    expect(attachment.antivirusScanStatus).toBe('error');
+    expect(attachment.antivirusScanMessage).toBe('Scanner timeout');
   });
 });

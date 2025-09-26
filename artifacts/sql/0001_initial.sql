@@ -1,330 +1,325 @@
--- IMM v0.1 database bootstrap
--- Garante extensoes requeridas
-create extension if not exists pgcrypto;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Usuarios e papeis ---------------------------------------------------------
-create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  email text unique not null,
-  password_hash text not null,
-  is_active boolean default true,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+-- Usuários e perfis
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists roles (
-  id serial primary key,
-  slug text unique not null,
-  name text not null
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  type TEXT NOT NULL,
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists user_roles (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id) on delete cascade,
-  role_id int references roles(id) on delete cascade,
-  project_id uuid null
+CREATE INDEX profiles_user_id_idx ON profiles(user_id);
+
+-- Projetos e turmas
+CREATE TABLE projects (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create unique index if not exists user_roles_unique_global on user_roles (user_id, role_id) where project_id is null;
-create unique index if not exists user_roles_unique_project on user_roles (user_id, role_id, project_id) where project_id is not null;
-
--- Beneficiarias e familia ---------------------------------------------------
-create table if not exists beneficiaries (
-  id uuid primary key default gen_random_uuid(),
-  code text unique,
-  full_name text not null,
-  birth_date date,
-  cpf text,
-  rg text,
-  rg_issuer text,
-  rg_issue_date date,
-  nis text,
-  phone1 text,
-  phone2 text,
-  email text,
-  address text,
-  neighborhood text,
-  city text,
-  state text,
-  reference text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+CREATE TABLE cohorts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id),
+  name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists household_members (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid not null references beneficiaries(id) on delete cascade,
-  name text,
-  birth_date date,
-  works boolean,
-  income numeric(12,2),
-  schooling text,
-  relationship text,
-  created_at timestamptz default now()
+CREATE INDEX cohorts_project_id_idx ON cohorts(project_id);
+
+-- Formulários e submissões
+CREATE TABLE forms (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  description TEXT,
+  schema JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'active'
 );
 
-create table if not exists vulnerabilities (
-  id serial primary key,
-  slug text unique,
-  label text not null
+CREATE TABLE form_submissions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_id UUID NOT NULL REFERENCES forms(id),
+  profile_id UUID NOT NULL REFERENCES profiles(id),
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  version INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'submitted'
 );
 
-create table if not exists beneficiary_vulnerabilities (
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  vulnerability_id int references vulnerabilities(id) on delete cascade,
-  created_at timestamptz default now(),
-  primary key (beneficiary_id, vulnerability_id)
+CREATE INDEX form_submissions_form_id_idx ON form_submissions(form_id);
+CREATE INDEX form_submissions_profile_id_idx ON form_submissions(profile_id);
+
+-- Consentimentos
+CREATE TABLE consents (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  profile_id UUID NOT NULL REFERENCES profiles(id),
+  type TEXT NOT NULL,
+  granted BOOLEAN NOT NULL,
+  data JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Formularios ---------------------------------------------------------------
-create table if not exists form_templates (
-  id uuid primary key default gen_random_uuid(),
-  form_type text not null,
-  schema_version text not null,
-  schema jsonb not null,
-  status text not null default 'active',
-  published_at timestamptz default now(),
-  unique (form_type, schema_version)
+CREATE INDEX consents_profile_id_idx ON consents(profile_id);
+
+-- Registros de auditoria
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id),
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id UUID,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists form_template_revisions (
-  id uuid primary key default gen_random_uuid(),
-  template_id uuid not null references form_templates(id) on delete cascade,
-  form_type text not null,
-  schema_version text not null,
-  revision int not null,
-  schema jsonb not null,
-  status text not null,
-  published_at timestamptz,
-  created_at timestamptz default now(),
-  created_by uuid references users(id),
-  unique (template_id, revision)
+CREATE INDEX audit_logs_user_id_idx ON audit_logs(user_id);
+CREATE INDEX audit_logs_resource_type_id_idx ON audit_logs(resource_type, resource_id);
+
+-- Notificações
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id),
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  metadata JSONB,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists form_template_revisions_lookup
-  on form_template_revisions (form_type, schema_version, revision desc);
+CREATE INDEX notifications_user_id_idx ON notifications(user_id);
 
-create table if not exists form_submissions (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  form_type text not null,
-  schema_version text not null,
-  payload jsonb not null,
-  signed_by text[],
-  signed_at timestamptz[],
-  attachments jsonb,
-  created_by uuid references users(id),
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+-- Anexos
+CREATE TABLE attachments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  filename TEXT NOT NULL,
+  mimetype TEXT NOT NULL,
+  key TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  scanned_at TIMESTAMPTZ,
+  is_infected BOOLEAN,
+  virus_names TEXT[]
 );
 
--- Projetos, turmas e presenca ----------------------------------------------
-create table if not exists projects (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  slug text unique,
-  description text,
-  coordinator_id uuid references users(id),
-  active boolean default true,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+-- Feed institucional
+CREATE TABLE feed_posts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  author_id UUID NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  metadata JSONB,
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists cohorts (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  code text,
-  weekday smallint,
-  shift text,
-  start_time time,
-  end_time time,
-  capacity int,
-  location text,
-  created_at timestamptz default now()
+CREATE INDEX feed_posts_author_id_idx ON feed_posts(author_id);
+CREATE INDEX feed_posts_published_at_idx ON feed_posts(published_at);
+
+-- Central de mensagens
+CREATE TABLE message_threads (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists cohort_educators (
-  cohort_id uuid references cohorts(id) on delete cascade,
-  user_id uuid references users(id) on delete cascade,
-  primary key (cohort_id, user_id)
+CREATE TABLE message_thread_participants (
+  thread_id UUID NOT NULL REFERENCES message_threads(id),
+  user_id UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (thread_id, user_id)
 );
 
-create table if not exists enrollments (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  cohort_id uuid references cohorts(id) on delete restrict,
-  status text not null default 'active',
-  enrolled_at date not null default current_date,
-  terminated_at date,
-  termination_reason text,
-  agreement_acceptance jsonb,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  thread_id UUID NOT NULL REFERENCES message_threads(id),
+  sender_id UUID NOT NULL REFERENCES users(id),
+  content TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists attendance (
-  id uuid primary key default gen_random_uuid(),
-  enrollment_id uuid references enrollments(id) on delete cascade,
-  date date not null,
-  present boolean not null,
-  justification text,
-  recorded_by uuid references users(id),
-  created_at timestamptz default now(),
-  unique (enrollment_id, date)
+CREATE INDEX messages_thread_id_idx ON messages(thread_id);
+CREATE INDEX messages_sender_id_idx ON messages(sender_id);
+
+-- Inscrições e planos de ação
+CREATE TABLE enrollments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cohort_id UUID NOT NULL REFERENCES cohorts(id),
+  profile_id UUID NOT NULL REFERENCES profiles(id),
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (cohort_id, profile_id)
 );
 
--- Plano de acao e evolucao --------------------------------------------------
-create table if not exists action_plans (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  created_by uuid references users(id),
-  status text default 'active',
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+CREATE INDEX enrollments_cohort_id_idx ON enrollments(cohort_id);
+CREATE INDEX enrollments_profile_id_idx ON enrollments(profile_id);
+
+CREATE TABLE action_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  enrollment_id UUID NOT NULL REFERENCES enrollments(id),
+  created_by UUID NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists action_items (
-  id uuid primary key default gen_random_uuid(),
-  action_plan_id uuid references action_plans(id) on delete cascade,
-  title text not null,
-  responsible text,
-  due_date date,
-  status text default 'pending',
-  support text,
-  notes text,
-  completed_at timestamptz,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+CREATE INDEX action_plans_enrollment_id_idx ON action_plans(enrollment_id);
+
+CREATE TABLE action_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  plan_id UUID NOT NULL REFERENCES action_plans(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  due_date DATE,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists evolutions (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  date date not null,
-  description text not null,
-  category text,
-  responsible text,
-  requires_signature boolean default false,
-  created_by uuid references users(id),
-  created_at timestamptz default now()
+CREATE INDEX action_items_plan_id_idx ON action_items(plan_id);
+
+-- Certificados
+CREATE TABLE certificates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  enrollment_id UUID NOT NULL REFERENCES enrollments(id),
+  type TEXT NOT NULL,
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata JSONB,
+  UNIQUE (enrollment_id, type)
 );
 
--- Mensagens internas --------------------------------------------------------
-create table if not exists threads (
-  id uuid primary key default gen_random_uuid(),
-  scope text not null,
-  created_by uuid references users(id),
-  subject text,
-  visibility text default 'internal',
-  classification text default 'publico_interno',
-  retention_expires_at timestamptz,
-  search_terms text[] default '{}'::text[],
-  created_at timestamptz default now()
+CREATE INDEX certificates_enrollment_id_idx ON certificates(enrollment_id);
+
+-- Funções e permissões
+CREATE TABLE roles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists thread_members (
-  thread_id uuid references threads(id) on delete cascade,
-  user_id uuid references users(id) on delete cascade,
-  primary key (thread_id, user_id)
+CREATE TABLE permissions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists messages (
-  id uuid primary key default gen_random_uuid(),
-  thread_id uuid references threads(id) on delete cascade,
-  author_id uuid references users(id),
-  body text not null,
-  visibility text default 'internal',
-  is_confidential boolean default false,
-  classification text default 'publico_interno',
-  retention_expires_at timestamptz,
-  mentions uuid[] default '{}'::uuid[],
-  attachment_ids uuid[] default '{}'::uuid[],
-  search_terms text[] default '{}'::text[],
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+CREATE TABLE role_permissions (
+  role_id UUID NOT NULL REFERENCES roles(id),
+  permission_id UUID NOT NULL REFERENCES permissions(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (role_id, permission_id)
 );
 
--- Feed institucional --------------------------------------------------------
-create table if not exists posts (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid null references projects(id) on delete set null,
-  author_id uuid references users(id),
-  title text,
-  body text,
-  tags text[],
-  published_at timestamptz default now(),
-  visibility text default 'internal'
+CREATE TABLE user_roles (
+  user_id UUID NOT NULL REFERENCES users(id),
+  role_id UUID NOT NULL REFERENCES roles(id),
+  project_id UUID REFERENCES projects(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, role_id, project_id)
 );
 
-create table if not exists comments (
-  id uuid primary key default gen_random_uuid(),
-  post_id uuid references posts(id) on delete cascade,
-  author_id uuid references users(id),
-  body text,
-  created_at timestamptz default now()
-);
+CREATE INDEX user_roles_project_id_idx ON user_roles(project_id);
 
--- Consentimentos e auditoria ------------------------------------------------
-create table if not exists consents (
-  id uuid primary key default gen_random_uuid(),
-  beneficiary_id uuid references beneficiaries(id) on delete cascade,
-  type text not null,
-  text_version text not null,
-  granted boolean not null,
-  granted_at timestamptz not null,
-  revoked_at timestamptz,
-  evidence jsonb,
-  created_by uuid references users(id)
-);
+-- Views para análise
+CREATE VIEW enrollments_overview AS
+SELECT
+  e.id AS enrollment_id,
+  e.status AS enrollment_status,
+  e.created_at AS enrollment_date,
+  c.id AS cohort_id,
+  c.name AS cohort_name,
+  p.id AS project_id,
+  p.name AS project_name,
+  pr.id AS profile_id,
+  u.id AS user_id,
+  u.name AS user_name,
+  u.email AS user_email
+FROM enrollments e
+JOIN cohorts c ON e.cohort_id = c.id
+JOIN projects p ON c.project_id = p.id
+JOIN profiles pr ON e.profile_id = pr.id
+JOIN users u ON pr.user_id = u.id;
 
-create table if not exists audit_logs (
-  id bigserial primary key,
-  user_id uuid,
-  entity text,
-  entity_id uuid,
-  action text,
-  before_data jsonb,
-  after_data jsonb,
-  justification text,
-  created_at timestamptz default now()
-);
+CREATE VIEW action_plans_overview AS
+SELECT
+  ap.id AS plan_id,
+  ap.title AS plan_title,
+  ap.status AS plan_status,
+  ap.created_at AS plan_created_at,
+  e.id AS enrollment_id,
+  c.id AS cohort_id,
+  c.name AS cohort_name,
+  p.id AS project_id,
+  p.name AS project_name,
+  pr.id AS profile_id,
+  u.id AS user_id,
+  u.name AS user_name,
+  u.email AS user_email,
+  COUNT(ai.id) AS total_items,
+  SUM(CASE WHEN ai.status = 'completed' THEN 1 ELSE 0 END) AS completed_items
+FROM action_plans ap
+JOIN enrollments e ON ap.enrollment_id = e.id
+JOIN cohorts c ON e.cohort_id = c.id
+JOIN projects p ON c.project_id = p.id
+JOIN profiles pr ON e.profile_id = pr.id
+JOIN users u ON pr.user_id = u.id
+LEFT JOIN action_items ai ON ap.id = ai.plan_id
+GROUP BY
+  ap.id, ap.title, ap.status, ap.created_at,
+  e.id, c.id, c.name, p.id, p.name,
+  pr.id, u.id, u.name, u.email;
 
--- Anexos --------------------------------------------------------------------
-create table if not exists attachments (
-  id uuid primary key default gen_random_uuid(),
-  owner_type text not null,
-  owner_id uuid not null,
-  file_path text not null,
-  file_name text,
-  mime_type text,
-  size_bytes bigint,
-  checksum text,
-  uploaded_by uuid references users(id),
-  scan_status text not null default 'skipped',
-  scan_signature text,
-  scan_engine text,
-  scan_started_at timestamptz,
-  scan_completed_at timestamptz,
-  scan_error text,
-  created_at timestamptz default now()
-);
+CREATE VIEW certificates_overview AS
+SELECT
+  cert.id AS certificate_id,
+  cert.type AS certificate_type,
+  cert.issued_at AS certificate_issued_at,
+  e.id AS enrollment_id,
+  e.status AS enrollment_status,
+  c.id AS cohort_id,
+  c.name AS cohort_name,
+  p.id AS project_id,
+  p.name AS project_name,
+  pr.id AS profile_id,
+  u.id AS user_id,
+  u.name AS user_name,
+  u.email AS user_email
+FROM certificates cert
+JOIN enrollments e ON cert.enrollment_id = e.id
+JOIN cohorts c ON e.cohort_id = c.id
+JOIN projects p ON c.project_id = p.id
+JOIN profiles pr ON e.profile_id = pr.id
+JOIN users u ON pr.user_id = u.id;
 
--- Indexes -------------------------------------------------------------------
-create index if not exists idx_users_email on users (email);
-create index if not exists idx_beneficiaries_name on beneficiaries using gin (to_tsvector('simple', full_name));
-create index if not exists idx_beneficiaries_code on beneficiaries (code);
-create index if not exists idx_household_beneficiary on household_members (beneficiary_id);
-create index if not exists idx_form_submissions_beneficiary on form_submissions (beneficiary_id, form_type);
-create index if not exists idx_projects_slug on projects (slug);
-create index if not exists idx_enrollments_beneficiary on enrollments (beneficiary_id);
-create index if not exists idx_enrollments_cohort on enrollments (cohort_id);
-create index if not exists idx_attendance_enrollment on attendance (enrollment_id, date);
-create index if not exists idx_action_plans_beneficiary on action_plans (beneficiary_id);
-create index if not exists idx_evolutions_beneficiary on evolutions (beneficiary_id, date);
-create index if not exists idx_threads_scope on threads (scope);
-create index if not exists idx_messages_thread on messages (thread_id, created_at);
-create index if not exists idx_posts_project on posts (project_id, published_at desc);
-create index if not exists idx_consents_beneficiary on consents (beneficiary_id, type);
-
-create index if not exists idx_audit_logs_entity on audit_logs (entity, entity_id);

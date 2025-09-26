@@ -20,6 +20,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
   CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
   UPLOADS_DIR: z.string().default('tmp/uploads'),
+  ANTIVIRUS_ENABLED: z.enum(['true', 'false']).default('true'),
+  ANTIVIRUS_HOST: z.string().default('localhost'),
+  ANTIVIRUS_PORT: z.string().regex(/^\d+$/).default('3310'),
+  ANTIVIRUS_TIMEOUT_MS: z.string().regex(/^\d+$/).default('30000'),
   NOTIFICATIONS_EMAIL_FROM: z.string().email().default('alerts@imm.local'),
   NOTIFICATIONS_EMAIL_SES_REGION: z.string().default('us-east-1'),
   NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID: z.string().optional(),
@@ -48,58 +52,3 @@ const envSchema = z.object({
   PII_ENCRYPTION_KMS_KEY_ID: z.string().optional(),
   PII_ENCRYPTION_CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
   AUDIT_LOG_SIGNING_KEY: z.string().min(32).optional(),
-  ATTACHMENTS_STORAGE: z.enum(['filesystem', 's3']).default('filesystem'),
-  ATTACHMENT_ALLOWED_MIME_TYPES: z.string().optional(),
-  ATTACHMENT_MAX_SIZE_BYTES: z.string().regex(/^[0-9]+$/).default('10485760'),
-  ANTIVIRUS_HOST: z.string().optional(),
-  ANTIVIRUS_PORT: z.string().regex(/^[0-9]+$/).default('3310'),
-  ANTIVIRUS_TLS: z.enum(['true', 'false']).default('false'),
-  ANTIVIRUS_PATH: z.string().default('/scan'),
-  ANTIVIRUS_API_KEY: z.string().optional(),
-  ANTIVIRUS_TIMEOUT_MS: z.string().regex(/^[0-9]+$/).default('10000'),
-  ANTIVIRUS_ALLOW_ON_ERROR: z.enum(['true', 'false']).default('false'),
-  S3_BUCKET: z.string().optional(),
-  S3_ENDPOINT: z.string().optional(),
-  S3_REGION: z.string().optional(),
-  S3_ACCESS_KEY_ID: z.string().optional(),
-  S3_SECRET_ACCESS_KEY: z.string().optional(),
-  S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('false'),
-  S3_SERVER_SIDE_ENCRYPTION: z.string().optional(),
-  DATA_RETENTION_DAYS: z.string().regex(/^[0-9]+$/).default('365'),
-  DATA_RETENTION_ANONYMIZE_DAYS: z.string().regex(/^[0-9]+$/).default('180'),
-  RATE_LIMIT_MAX: z.string().regex(/^[0-9]+$/).default('100'),
-  RATE_LIMIT_TIME_WINDOW_MS: z.string().regex(/^[0-9]+$/).default('60000'),
-  TOKEN_ROTATION_TTL_MINUTES: z.string().regex(/^[0-9]+$/).default('1440'),
-  TOKEN_ROTATION_REUSE_WINDOW_MINUTES: z.string().regex(/^[0-9]+$/).default('5'),
-  MFA_TOTP_ISSUER: z.string().default('MOVEONGS'),
-  MFA_LOGIN_CHALLENGE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
-  WEBAUTHN_RP_ID: z.string().default('imm.local'),
-  WEBAUTHN_RP_NAME: z.string().default('MOVE ONG Backend'),
-  WEBAUTHN_RP_ORIGIN: z.string().url().default('https://imm.local'),
-  CONSENT_REVIEW_INTERVAL_DAYS: z.string().regex(/^[0-9]+$/).default('365'),
-  CONSENT_REVIEW_NOTIFICATION_COOLDOWN_DAYS: z.string().regex(/^[0-9]+$/).default('30'),
-  FORM_VERIFICATION_BASE_URL: z.string().url().optional(),
-  FORM_VERIFICATION_HASH_SECRET: z.string().min(16).optional(),
-});
-
-type Env = z.infer<typeof envSchema>;
-
-let cachedEnv: Env | null = null;
-
-export function getEnv(): Env {
-  const source = { ...process.env };
-
-  if (source.NODE_ENV === 'test' || process.env.NODE_ENV === 'test') {
-    source.RESPONSE_MASKING_ENABLED = source.RESPONSE_MASKING_ENABLED ?? 'false';
-  }
-
-  if (source.NODE_ENV === 'test') {
-    return envSchema.parse(source);
-  }
-
-  if (!cachedEnv) {
-    cachedEnv = envSchema.parse(source);
-  }
-
-  return cachedEnv;
-}

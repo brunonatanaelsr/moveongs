@@ -5,6 +5,7 @@ Este diretório reúne os artefatos base entregues para o Sistema de Gestao de B
 ## Conteudo
 
 - `sql/0001_initial.sql`: migracao inicial completa do banco Postgres (inclui extensoes, chaves estrangeiras, indices e tabelas descritas na especificacao v0.1).
+- `sql/0007_attachment_antivirus.sql`: ajuste incremental adicionando metadados de varredura antivírus aos anexos.
 - `json_schemas/`: colecao de JSON Schemas (Draft 2020-12) para os formularios oficiais do IMM. Use-os no motor schema-driven para renderizacao, validacao e versionamento dos formularios.
 
 ## Uso rapido
