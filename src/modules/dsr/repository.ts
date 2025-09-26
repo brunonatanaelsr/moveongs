@@ -57,11 +57,18 @@ export async function fetchEnrollments(beneficiaryId: string) {
 
 export async function fetchActionPlans(beneficiaryId: string) {
   const { rows } = await query(
-    `select ap.*, coalesce(json_agg(ai order by ai.created_at) filter (where ai.id is not null), '[]'::json) as items
+    `select
+         ap.id,
+         ap.beneficiary_id,
+         ap.created_by,
+         ap.status,
+         ap.created_at,
+         ap.updated_at,
+         coalesce(json_agg(ai order by ai.created_at) filter (where ai.id is not null), '[]'::json) as items
        from action_plans ap
        left join action_items ai on ai.action_plan_id = ap.id
       where ap.beneficiary_id = $1
-      group by ap.id
+      group by ap.id, ap.beneficiary_id, ap.created_by, ap.status, ap.created_at, ap.updated_at
       order by ap.created_at desc`,
     [beneficiaryId],
   );
