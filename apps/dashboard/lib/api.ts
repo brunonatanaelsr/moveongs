@@ -2,7 +2,25 @@
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
 
-export async function fetchJson(path: string, params: Record<string, unknown> = {}, token?: string | null) {
+interface RequestOptions {
+  params?: Record<string, unknown>;
+  body?: unknown;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+}
+
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public data?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function requestJson(path: string, options: RequestOptions = {}, token?: string | null) {
+  const { params = {}, body, method = 'GET' } = options;
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
@@ -15,15 +33,26 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
 
   const url = `${API_URL}${path}${search.toString() ? `?${search.toString()}` : ''}`;
   const response = await fetch(url, {
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const contentType = response.headers.get('Content-Type') ?? '';
+    let errorData: unknown;
+    try {
+      errorData = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text();
+    } catch (e) {
+      errorData = null;
+    }
+    throw new ApiError(`Request failed: ${response.status}`, response.status, errorData);
   }
 
   const contentType = response.headers.get('Content-Type') ?? '';
@@ -33,39 +62,42 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
   return response.text();
 }
 
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  const contentType = response.headers.get('Content-Type') ?? '';
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
-  return response.text();
+export async function get<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, 'method' | 'body'> = {},
+  token?: string | null,
+): Promise<T> {
+  return requestJson(path, { ...options, method: 'GET' }, token);
 }
 
-export async function downloadFile(path: string, params: Record<string, unknown>, token: string, filename: string) {
-  const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    search.set(key, String(value));
-  });
-  const url = `${API_URL}${path}${search.toString() ? `?${search.toString()}` : ''}`;
-  const response = await fetch(url, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Export failed: ${response.status}`);
-  }
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(objectUrl);
+export async function post<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, 'method'> = {},
+  token?: string | null,
+): Promise<T> {
+  return requestJson(path, { ...options, method: 'POST' }, token);
+}
+
+export async function put<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, 'method'> = {},
+  token?: string | null,
+): Promise<T> {
+  return requestJson(path, { ...options, method: 'PUT' }, token);
+}
+
+export async function patch<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, 'method'> = {},
+  token?: string | null,
+): Promise<T> {
+  return requestJson(path, { ...options, method: 'PATCH' }, token);
+}
+
+export async function del<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, 'method' | 'body'> = {},
+  token?: string | null,
+): Promise<T> {
+  return requestJson(path, { ...options, method: 'DELETE' }, token);
 }

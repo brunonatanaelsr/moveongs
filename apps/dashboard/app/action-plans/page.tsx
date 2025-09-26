@@ -6,38 +6,33 @@ import { PrimarySidebar } from '../../components/PrimarySidebar';
 import { useRequirePermission } from '../../hooks/useRequirePermission';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import {
-  demoBeneficiaries,
-  demoActionPlans,
-  getActionPlanByBeneficiary,
-  type DemoActionPlan,
-  type DemoActionPlanTask,
-} from '../../lib/demo-data';
+import { BENEFICIARIES } from '../../data/mockOperations';
+import type { ActionPlan, ActionItem } from '../../types/operations';
 
-const STATUS_LABELS: Record<DemoActionPlanTask['status'], string> = {
-  planejada: 'Planejada',
+const STATUS_LABELS: Record<ActionItem['status'], string> = {
+  pendente: 'Pendente',
   em_andamento: 'Em andamento',
   concluida: 'Concluída',
   atrasada: 'Atrasada',
 };
 
-const STATUS_ORDER: DemoActionPlanTask['status'][] = ['planejada', 'em_andamento', 'atrasada', 'concluida'];
+const STATUS_ORDER: ActionItem['status'][] = ['pendente', 'em_andamento', 'atrasada', 'concluida'];
 
 export default function ActionPlansPage() {
   const session = useRequirePermission(['action-plans:read', 'action-plans:write']);
-  const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState<string>(demoBeneficiaries[0]?.id ?? '');
-  const [plans, setPlans] = useState<Record<string, DemoActionPlan>>(
-    Object.fromEntries(demoActionPlans.map((plan) => [plan.beneficiaryId, plan]))
+  const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState<string>(BENEFICIARIES[0]?.id ?? '');
+  const [plans, setPlans] = useState<Record<string, ActionPlan>>(
+    Object.fromEntries(BENEFICIARIES.map((beneficiary) => [beneficiary.id, beneficiary.actionPlan]))
   );
 
-  const plan = plans[selectedBeneficiaryId] ?? getActionPlanByBeneficiary(selectedBeneficiaryId) ?? null;
+  const plan = plans[selectedBeneficiaryId] ?? null;
   const primarySidebar = useMemo(() => (session ? <PrimarySidebar session={session} /> : null), [session]);
 
   if (session === undefined) {
     return null;
   }
 
-  const handleStatusChange = (taskId: string, status: DemoActionPlanTask['status']) => {
+  const handleStatusChange = (taskId: string, status: ActionItem['status']) => {
     if (!plan) return;
     setPlans((prev) => {
       const current = prev[selectedBeneficiaryId] ?? plan;
@@ -56,11 +51,11 @@ export default function ActionPlansPage() {
     const title = prompt('Descreva a nova ação do plano');
     if (!title) return;
 
-    const newTask: DemoActionPlanTask = {
+    const newTask: ActionItem = {
       id: `task-${Date.now()}`,
       title,
-      status: 'planejada',
-      responsible: plan.owner.split(': ')[1] ?? 'Equipe IMM',
+      status: 'pendente',
+      responsible: 'Equipe IMM',
       dueDate: new Date().toISOString().slice(0, 10),
       support: 'Definir recursos necessários',
     };
@@ -95,7 +90,7 @@ export default function ActionPlansPage() {
             onChange={(event) => setSelectedBeneficiaryId(event.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/80 focus:border-emerald-400 focus:outline-none"
           >
-            {demoBeneficiaries.map((beneficiary) => (
+            {BENEFICIARIES.map((beneficiary) => (
               <option key={beneficiary.id} value={beneficiary.id}>
                 {beneficiary.name}
               </option>
@@ -108,10 +103,10 @@ export default function ActionPlansPage() {
                 <h3 className="text-xs uppercase tracking-[0.24em] text-white/40">Objetivo</h3>
                 <p className="text-white">{plan.objective}</p>
               </div>
-              <div>
-                <h3 className="text-xs uppercase tracking-[0.24em] text-white/40">Responsável</h3>
-                <p>{plan.owner}</p>
-              </div>
+            <div>
+              <h3 className="text-xs uppercase tracking-[0.24em] text-white/40">Áreas prioritárias</h3>
+              <p>{plan.priorityAreas.join(' • ')}</p>
+            </div>
               <div>
                 <h3 className="text-xs uppercase tracking-[0.24em] text-white/40">Criado em</h3>
                 <p>{plan.createdAt}</p>
@@ -138,14 +133,14 @@ export default function ActionPlansPage() {
 }
 
 interface TasksBoardProps {
-  plan: DemoActionPlan;
-  onStatusChange: (taskId: string, status: DemoActionPlanTask['status']) => void;
+  plan: ActionPlan;
+  onStatusChange: (taskId: string, status: ActionItem['status']) => void;
 }
 
 function TasksBoard({ plan, onStatusChange }: TasksBoardProps) {
   const grouped = STATUS_ORDER.map((status) => ({
     status,
-    tasks: plan.tasks.filter((task) => task.status === status),
+    tasks: plan.items.filter((task) => task.status === status),
   }));
 
   return (

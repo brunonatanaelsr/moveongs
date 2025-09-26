@@ -11,8 +11,8 @@ interface FiltersBarProps {
 }
 
 export function FiltersBar({ filters, onChange, onReset }: FiltersBarProps) {
-  const projects = useProjects();
-  const cohorts = useCohorts(filters.projectId);
+  const { projects } = useProjects();
+  const { cohorts } = useCohorts(filters.projectId);
 
   function handleInput(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = event.target;

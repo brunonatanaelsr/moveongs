@@ -1,67 +1,134 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { PrimarySidebar } from '../../components/PrimarySidebar';
 import { useRequirePermission } from '../../hooks/useRequirePermission';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import {
-  demoBeneficiaries,
-  demoCohorts,
-  demoProjects,
-  type DemoBeneficiary,
-  type DemoCohort,
-  type DemoProject,
-} from '../../lib/demo-data';
+import { Input } from '../../components/ui/input';
+import { useProjects, useCohorts } from '../../hooks/useProjects';
+import { useEnrollments, type EnrollmentSummary } from '../../hooks/useEnrollments';
+import { postJson } from '../../lib/api';
+import { LoadingState } from '../../components/LoadingState';
+import type { ProjectSummary } from '../../types/operations';
 
-interface LocalEnrollment {
-  id: string;
-  beneficiary: DemoBeneficiary;
-  project: DemoProject;
-  cohort: DemoCohort;
+interface EnrollmentFormState {
+  beneficiaryName: string;
+  beneficiaryCode: string;
+  contact: string;
   startDate: string;
-  status: 'ativa' | 'aguardando' | 'pendente';
+  cohortId: string;
 }
+
+const initialFormState: EnrollmentFormState = {
+  beneficiaryName: '',
+  beneficiaryCode: '',
+  contact: '',
+  startDate: new Date().toISOString().slice(0, 10),
+  cohortId: '',
+};
 
 export default function EnrollmentsPage() {
   const session = useRequirePermission(['enrollments:create']);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(demoProjects[0]?.id ?? '');
-  const [selectedCohortId, setSelectedCohortId] = useState<string>('');
-  const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState<string>('');
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [enrollments, setEnrollments] = useState<LocalEnrollment[]>([]);
+  const { projects, isLoading: loadingProjects } = useProjects();
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [form, setForm] = useState<EnrollmentFormState>(initialFormState);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  const { cohorts } = useCohorts(selectedProjectId || undefined);
+  useEffect(() => {
+    if (cohorts.length > 0) {
+      setForm((prev) => ({ ...prev, cohortId: cohorts[0].id }));
+    }
+  }, [cohorts]);
+
+  const { enrollments, mutateEnrollments, isLoading: loadingEnrollments } = useEnrollments(selectedProjectId || undefined);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId),
+    [projects, selectedProjectId],
+  );
 
   const primarySidebar = useMemo(() => (session ? <PrimarySidebar session={session} /> : null), [session]);
-  const availableCohorts = demoCohorts.filter((cohort) => cohort.projectId === selectedProjectId);
-  const project = demoProjects.find((item) => item.id === selectedProjectId) ?? demoProjects[0];
 
-  if (session === undefined) {
-    return null;
+  const notify = (message: string) => {
+    setFeedback(message);
+    window.setTimeout(() => setFeedback(null), 4000);
+  };
+
+  if (session === undefined || loadingProjects) {
+    return <LoadingState message="Carregando dados de projetos..." />;
   }
 
+  if (!session) {
+    return <LoadingState message="Carregando..." />;
+  }
+
+  const handleInputChange = (field: keyof EnrollmentFormState, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleCreateEnrollment = () => {
-    const beneficiary = demoBeneficiaries.find((item) => item.id === selectedBeneficiaryId);
-    const cohort = availableCohorts.find((item) => item.id === selectedCohortId);
-    if (!beneficiary || !cohort || !project) {
-      alert('Selecione beneficiária, projeto e turma válidos.');
+    if (!selectedProject) {
+      notify('Selecione um projeto para registrar a inscrição.');
       return;
     }
 
-    setEnrollments((prev) => [
-      {
-        id: `enr-${Date.now()}`,
-        beneficiary,
-        cohort,
-        project,
-        startDate,
-        status: 'pendente',
-      },
-      ...prev,
-    ]);
+    if (!form.beneficiaryName.trim() || !form.cohortId) {
+      notify('Informe o nome da beneficiária e a turma.');
+      return;
+    }
 
-    setSelectedBeneficiaryId('');
-    setSelectedCohortId('');
+    const beneficiaryId = form.beneficiaryCode.trim() || `beneficiary-${Math.random().toString(36).slice(2, 8)}`;
+
+    const optimistic: EnrollmentSummary = {
+      id: `enrollment-${Math.random().toString(36).slice(2, 10)}`,
+      projectId: selectedProject.id,
+      cohortId: form.cohortId,
+      startDate: form.startDate,
+      status: 'pendente',
+      agreementsAccepted: true,
+      beneficiary: {
+        id: beneficiaryId,
+        name: form.beneficiaryName.trim(),
+      },
+    };
+
+    const snapshot = [...enrollments];
+    mutateEnrollments({ data: [optimistic, ...snapshot] }, false);
+
+    void (async () => {
+      try {
+        await postJson(
+          '/enrollments',
+          {
+            projectId: selectedProject.id,
+            cohortId: form.cohortId,
+            beneficiary: {
+              id: beneficiaryId,
+              name: form.beneficiaryName.trim(),
+              contact: form.contact.trim(),
+            },
+            startDate: form.startDate,
+            agreementsAccepted: true,
+          },
+          session.token,
+        );
+        await mutateEnrollments();
+        setForm((prev) => ({ ...initialFormState, cohortId: prev.cohortId || cohorts[0]?.id || '' }));
+        notify('Inscrição registrada e enviada para a API.');
+      } catch (error) {
+        await mutateEnrollments({ data: snapshot }, false);
+        notify('Não foi possível registrar a inscrição. Tente novamente.');
+      }
+    })();
   };
 
   return (
@@ -70,6 +137,11 @@ export default function EnrollmentsPage() {
       description="Gerencie inscrições, turmas e lista de espera das beneficiárias de forma centralizada."
       sidebar={primarySidebar}
     >
+      {feedback && (
+        <div className="mb-6 rounded-3xl border border-emerald-300/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+          {feedback}
+        </div>
+      )}
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Card className="space-y-6" padding="lg">
           <header className="space-y-1">
@@ -87,11 +159,11 @@ export default function EnrollmentsPage() {
                 value={selectedProjectId}
                 onChange={(event) => {
                   setSelectedProjectId(event.target.value);
-                  setSelectedCohortId('');
+                  setForm((prev) => ({ ...prev, cohortId: '' }));
                 }}
                 className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/80 focus:border-emerald-400 focus:outline-none"
               >
-                {demoProjects.map((item) => (
+                {projects.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -105,78 +177,83 @@ export default function EnrollmentsPage() {
               </label>
               <select
                 id="cohort"
-                value={selectedCohortId}
-                onChange={(event) => setSelectedCohortId(event.target.value)}
+                value={form.cohortId}
+                onChange={(event) => handleInputChange('cohortId', event.target.value)}
                 className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/80 focus:border-emerald-400 focus:outline-none"
               >
-                <option value="">Selecione uma turma</option>
-                {availableCohorts.map((cohort) => (
+                {cohorts.length === 0 && <option value="">Nenhuma turma disponível</option>}
+                {cohorts.map((cohort) => (
                   <option key={cohort.id} value={cohort.id}>
-                    {cohort.name} • {cohort.weekday} às {cohort.time}
+                    {cohort.name} • {cohort.schedule}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="beneficiary" className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                Beneficiária
-              </label>
-              <select
-                id="beneficiary"
-                value={selectedBeneficiaryId}
-                onChange={(event) => setSelectedBeneficiaryId(event.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/80 focus:border-emerald-400 focus:outline-none"
-              >
-                <option value="">Selecione uma beneficiária</option>
-                {demoBeneficiaries.map((beneficiary) => (
-                  <option key={beneficiary.id} value={beneficiary.id}>
-                    {beneficiary.name} • {beneficiary.status === 'aguardando' ? 'Lista de espera' : 'Ativa'}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Input
+              id="beneficiary-name"
+              label="Nome da beneficiária"
+              placeholder="Digite o nome completo"
+              value={form.beneficiaryName}
+              onChange={(event) => handleInputChange('beneficiaryName', event.target.value)}
+            />
 
-            <div className="space-y-2">
-              <label htmlFor="startDate" className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                Data de início
-              </label>
-              <input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/80 focus:border-emerald-400 focus:outline-none"
-              />
-            </div>
+            <Input
+              id="beneficiary-code"
+              label="Código de matrícula (opcional)"
+              placeholder="IMM-2024-001"
+              value={form.beneficiaryCode}
+              onChange={(event) => handleInputChange('beneficiaryCode', event.target.value)}
+            />
+
+            <Input
+              id="beneficiary-contact"
+              label="Contato telefônico"
+              placeholder="(11) 90000-0000"
+              value={form.contact}
+              onChange={(event) => handleInputChange('contact', event.target.value)}
+            />
+
+            <Input
+              id="startDate"
+              type="date"
+              label="Data de início"
+              value={form.startDate}
+              onChange={(event) => handleInputChange('startDate', event.target.value)}
+            />
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Button type="button" onClick={handleCreateEnrollment}>
               Registrar inscrição
             </Button>
-            <Button type="button" variant="secondary">
-              Integrar com API /enrollments
+            <Button type="button" variant="secondary" disabled>
+              Exportar comprovante
             </Button>
           </div>
         </Card>
 
-        <ProjectOverviewCard project={project} cohorts={availableCohorts} />
+        <ProjectOverviewCard project={selectedProject} cohorts={cohorts} loading={loadingEnrollments} />
       </div>
 
-      <EnrollmentTable enrollments={enrollments} />
+      <EnrollmentTable enrollments={enrollments} cohorts={cohorts} />
     </Shell>
   );
 }
 
 interface ProjectOverviewCardProps {
-  project?: DemoProject;
-  cohorts: DemoCohort[];
+  project?: ProjectSummary;
+  cohorts: ProjectSummary['cohorts'];
+  loading: boolean;
 }
 
-function ProjectOverviewCard({ project, cohorts }: ProjectOverviewCardProps) {
+function ProjectOverviewCard({ project, cohorts, loading }: ProjectOverviewCardProps) {
   if (!project) {
-    return null;
+    return (
+      <Card className="space-y-4" padding="lg">
+        <p className="text-sm text-white/60">Selecione um projeto para visualizar capacidade e turmas.</p>
+      </Card>
+    );
   }
 
   return (
@@ -194,15 +271,15 @@ function ProjectOverviewCard({ project, cohorts }: ProjectOverviewCardProps) {
         </div>
         <div>
           <dt className="text-xs uppercase tracking-[0.24em] text-white/40">Matriculadas</dt>
-          <dd className="text-lg text-white">{project.enrolled}</dd>
+          <dd className="text-lg text-white">{project.activeEnrollments}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-[0.24em] text-white/40">Lista de espera</dt>
-          <dd className="text-lg text-white">{project.waitlist}</dd>
+          <dd className="text-lg text-white">{project.riskAlerts}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-[0.24em] text-white/40">Local</dt>
-          <dd>{project.location}</dd>
+          <dt className="text-xs uppercase tracking-[0.24em] text-white/40">Status</dt>
+          <dd>{loading ? 'Sincronizando inscrições...' : 'Dados atualizados'}</dd>
         </div>
       </dl>
 
@@ -212,9 +289,7 @@ function ProjectOverviewCard({ project, cohorts }: ProjectOverviewCardProps) {
           {cohorts.map((cohort) => (
             <li key={cohort.id} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
               <p className="font-medium text-white">{cohort.name}</p>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/40">
-                {cohort.weekday} • {cohort.time} • {cohort.educator}
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-white/40">{cohort.schedule}</p>
             </li>
           ))}
         </ul>
@@ -224,14 +299,15 @@ function ProjectOverviewCard({ project, cohorts }: ProjectOverviewCardProps) {
 }
 
 interface EnrollmentTableProps {
-  enrollments: LocalEnrollment[];
+  enrollments: EnrollmentSummary[];
+  cohorts: ProjectSummary['cohorts'];
 }
 
-function EnrollmentTable({ enrollments }: EnrollmentTableProps) {
+function EnrollmentTable({ enrollments, cohorts }: EnrollmentTableProps) {
   if (enrollments.length === 0) {
     return (
       <Card className="space-y-3" padding="lg">
-        <h3 className="text-lg font-semibold text-white">Nenhuma inscrição recente</h3>
+        <h3 className="text-lg font-semibold text-white">Nenhuma inscrição cadastrada</h3>
         <p className="text-sm text-white/70">
           Use o formulário acima para registrar novas inscrições e acompanhar o status de aprovação com a coordenação.
         </p>
@@ -244,9 +320,9 @@ function EnrollmentTable({ enrollments }: EnrollmentTableProps) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-white/50">Histórico</p>
-          <h3 className="text-xl font-semibold text-white">Inscrições registradas nesta sessão</h3>
+          <h3 className="text-xl font-semibold text-white">Inscrições do projeto selecionado</h3>
         </div>
-        <Button type="button" variant="secondary">
+        <Button type="button" variant="secondary" disabled>
           Exportar para planilha
         </Button>
       </div>
@@ -256,48 +332,26 @@ function EnrollmentTable({ enrollments }: EnrollmentTableProps) {
           <thead className="text-xs uppercase tracking-[0.22em] text-white/40">
             <tr>
               <th className="px-4 py-3 text-left">Beneficiária</th>
-              <th className="px-4 py-3 text-left">Projeto</th>
               <th className="px-4 py-3 text-left">Turma</th>
               <th className="px-4 py-3 text-left">Início</th>
               <th className="px-4 py-3 text-left">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {enrollments.map((enrollment) => (
-              <tr key={enrollment.id} className="bg-white/0">
-                <td className="px-4 py-3 text-white">{enrollment.beneficiary.name}</td>
-                <td className="px-4 py-3">{enrollment.project.name}</td>
-                <td className="px-4 py-3">
-                  {enrollment.cohort.name} • {enrollment.cohort.weekday}
-                </td>
-                <td className="px-4 py-3">{enrollment.startDate}</td>
-                <td className="px-4 py-3">
-                  <StatusPill status={enrollment.status} />
-                </td>
-              </tr>
-            ))}
+            {enrollments.map((enrollment) => {
+              const cohort = cohorts.find((item) => item.id === enrollment.cohortId);
+              return (
+                <tr key={enrollment.id} className="bg-white/0">
+                  <td className="px-4 py-3 text-white">{enrollment.beneficiary.name}</td>
+                  <td className="px-4 py-3">{cohort ? cohort.name : enrollment.cohortId}</td>
+                  <td className="px-4 py-3">{new Date(enrollment.startDate).toLocaleDateString('pt-BR')}</td>
+                  <td className="px-4 py-3 capitalize">{enrollment.status}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     </Card>
-  );
-}
-
-function StatusPill({ status }: { status: LocalEnrollment['status'] }) {
-  const labelMap: Record<LocalEnrollment['status'], string> = {
-    ativa: 'Ativa',
-    aguardando: 'Lista de espera',
-    pendente: 'Pendente de aprovação',
-  };
-  const colorMap: Record<LocalEnrollment['status'], string> = {
-    ativa: 'bg-emerald-500/20 text-emerald-100 border-emerald-400/40',
-    aguardando: 'bg-amber-500/15 text-amber-100 border-amber-400/30',
-    pendente: 'bg-cyan-500/15 text-cyan-100 border-cyan-400/30',
-  };
-
-  return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${colorMap[status]}`}>
-      {labelMap[status]}
-    </span>
   );
 }
