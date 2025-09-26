@@ -167,9 +167,13 @@ export async function listPosts(params: {
   } else if (params.projectId) {
     values.push(params.projectId);
     conditions.push(`posts.project_id = $${values.length}`);
-  } else if (params.allowedProjectIds && params.allowedProjectIds.length > 0) {
-    values.push(params.allowedProjectIds);
-    conditions.push(`(posts.project_id is null or posts.project_id = any($${values.length}::uuid[]))`);
+  } else if (params.allowedProjectIds) {
+    if (params.allowedProjectIds.length === 0) {
+      conditions.push('posts.project_id is null');
+    } else {
+      values.push(params.allowedProjectIds);
+      conditions.push(`(posts.project_id is null or posts.project_id = any($${values.length}::uuid[]))`);
+    }
   }
 
   if (!params.includeHidden) {

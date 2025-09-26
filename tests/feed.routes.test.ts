@@ -233,6 +233,110 @@ describe('Feed routes', () => {
     expect(posts.every((post) => post.project === null)).toBe(true);
   });
 
+  it('returns only institutional posts when user projects do not overlap beneficiary projects', async () => {
+    const adminToken = await login(app, 'admin@imm.local', 'ChangeMe123!');
+
+    const beneficiaryProjectId = randomUUID();
+    await pool.query(`insert into projects (id, name) values ($1, 'Projeto Beneficiária')`, [beneficiaryProjectId]);
+
+    const cohortId = randomUUID();
+    await pool.query(`insert into cohorts (id, project_id, code) values ($1, $2, 'C1')`, [cohortId, beneficiaryProjectId]);
+
+    const beneficiaryId = randomUUID();
+    await pool.query(`insert into beneficiaries (id, full_name) values ($1, 'Benef sem acesso ao projeto da educadora')`, [beneficiaryId]);
+
+    await pool.query(
+      `insert into enrollments (id, beneficiary_id, cohort_id, status) values ($1, $2, $3, 'active')`,
+      [randomUUID(), beneficiaryId, cohortId],
+    );
+
+    await pool.query(
+      `insert into consents (id, beneficiary_id, type, text_version, granted, granted_at) values ($1, $2, 'lgpd', 'v1', true, now())`,
+      [randomUUID(), beneficiaryId],
+    );
+
+    const educatorProjectId = randomUUID();
+    await pool.query(`insert into projects (id, name) values ($1, 'Projeto Educadora')`, [educatorProjectId]);
+
+    const institutionalPost = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      payload: {
+        body: 'Comunicado institucional sem projeto',
+      },
+    });
+    expect(institutionalPost.statusCode).toBe(201);
+    const institutionalPostId = institutionalPost.json().post.id as string;
+
+    const educatorProjectPost = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      payload: {
+        projectId: educatorProjectId,
+        body: 'Atualização do projeto da educadora',
+        visibility: 'project',
+      },
+    });
+    expect(educatorProjectPost.statusCode).toBe(201);
+    const educatorProjectPostId = educatorProjectPost.json().post.id as string;
+
+    const beneficiaryProjectPost = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      payload: {
+        projectId: beneficiaryProjectId,
+        body: 'Atualização do projeto da beneficiária',
+        visibility: 'project',
+      },
+    });
+    expect(beneficiaryProjectPost.statusCode).toBe(201);
+    const beneficiaryProjectPostId = beneficiaryProjectPost.json().post.id as string;
+
+    const educatorPassword = 'EducadoraSemOverlap123!';
+    const educatorPasswordHash = await hash(educatorPassword, 12);
+    const educatorUserId = randomUUID();
+    await pool.query(
+      `insert into users (id, name, email, password_hash) values ($1, 'Educadora Sem Overlap', 'educadora.no.overlap@imm.local', $2)`,
+      [educatorUserId, educatorPasswordHash],
+    );
+
+    await pool.query(
+      `insert into user_profiles (user_id, display_name) values ($1, 'Educadora Sem Overlap')`,
+      [educatorUserId],
+    );
+
+    const { rows: roleRows } = await pool.query<{ id: number }>(
+      `select id from roles where slug = 'educadora'`,
+    );
+    const roleId = roleRows[0]?.id;
+    expect(roleId).toBeDefined();
+
+    await pool.query(
+      `insert into user_roles (id, user_id, role_id, project_id) values ($1, $2, $3, $4)`,
+      [randomUUID(), educatorUserId, roleId, educatorProjectId],
+    );
+
+    const educatorToken = await login(app, 'educadora.no.overlap@imm.local', educatorPassword);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/feed/posts?beneficiaryId=${beneficiaryId}`,
+      headers: { Authorization: `Bearer ${educatorToken}` },
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.onlyInstitutional).toBe(true);
+    const posts = body.data as Array<{ id: string; project: { id: string } | null }>;
+    expect(posts.some((post) => post.id === institutionalPostId)).toBe(true);
+    expect(posts.some((post) => post.id === educatorProjectPostId)).toBe(false);
+    expect(posts.some((post) => post.id === beneficiaryProjectPostId)).toBe(false);
+    expect(posts.every((post) => post.project === null)).toBe(true);
+  });
+
   it('blocks project posts when beneficiaries lack LGPD consent', async () => {
     const { projectId, beneficiaryId } = await createProjectWithEnrollment();
     const token = await login(app, 'admin@imm.local', 'ChangeMe123!');

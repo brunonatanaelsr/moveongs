@@ -69,8 +69,15 @@ export async function listFeedPosts(params: {
     }
   }
 
+  if (allowedProjects && allowedProjects.length === 0 && !onlyInstitutional) {
+    // when the caller has project restrictions but none overlap with the beneficiary,
+    // fall back to institutional posts only
+    onlyInstitutional = true;
+    allowedProjects = null;
+  }
+
   const posts = await listPosts({
-    projectId: params.projectId,
+    projectId: onlyInstitutional ? null : params.projectId,
     allowedProjectIds: allowedProjects ?? null,
     includeHidden: params.includeHidden,
     limit: params.limit,
