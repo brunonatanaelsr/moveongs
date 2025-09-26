@@ -1,4 +1,4 @@
-import { type FormSchema } from '../types/operations';
+import { type FormSchema } from '../types/form-schema';
 
 export const FORM_SCHEMAS: FormSchema[] = [
   {
