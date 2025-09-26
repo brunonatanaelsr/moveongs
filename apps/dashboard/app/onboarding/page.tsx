@@ -8,7 +8,7 @@ import { JsonSchemaForm } from '../../components/forms/JsonSchemaForm';
 import { FORM_SCHEMA_MAP } from '../../lib/forms/schemas';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { demoBeneficiaries } from '../../lib/demo-data';
+import { BENEFICIARIES } from '../../data/mockOperations';
 
 const steps = [
   {
@@ -163,7 +163,7 @@ interface SummaryCardProps {
 }
 
 function SummaryCard({ data, onRestart }: SummaryCardProps) {
-  const upcomingBeneficiary = demoBeneficiaries.find((beneficiary) => beneficiary.status === 'aguardando');
+  const upcomingBeneficiary = BENEFICIARIES.find((beneficiary) => beneficiary.status === 'em_triagem');
 
   return (
     <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">

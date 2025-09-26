@@ -1,127 +1,145 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Shell } from '../../components/Shell';
 import { PrimarySidebar } from '../../components/PrimarySidebar';
 import { useRequirePermission } from '../../hooks/useRequirePermission';
-import { BENEFICIARIES, PROJECTS, INITIAL_FORM_SUBMISSIONS, ALL_FORM_SCHEMAS } from '../../data/mockOperations';
-import type { FormSubmission } from '../../data/mockOperations';
-import type { AttendanceRecord, ProjectSummary } from '../../types/operations';
+import { useProjects } from '../../hooks/useProjects';
+import {
+  useAttendance,
+  useEnrollments,
+  type AttendanceMap,
+  type EnrollmentSummary,
+} from '../../hooks/useEnrollments';
+import { FORM_SCHEMAS } from '../../data/formSchemas';
 import { FormRenderer } from '../../components/FormRenderer';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { LoadingState } from '../../components/LoadingState';
+import { postJson } from '../../lib/api';
+import type { AttendanceRecord, FormSubmission, ProjectSummary } from '../../types/operations';
 
-interface EnrollmentListItem {
-  id: string;
-  projectId: string;
-  classroomId: string;
-  beneficiaryId: string;
-  beneficiaryName: string;
-  status: string;
-  startDate: string;
-}
+const enrollmentSchema = FORM_SCHEMAS.find((schema) => schema.id === 'form.inscricao_projeto');
 
-interface AttendanceEntry extends AttendanceRecord {
-  beneficiaryId: string;
-  beneficiaryName: string;
-  classroomId: string;
-}
-
-const enrollmentSchema = ALL_FORM_SCHEMAS.find((schema) => schema.id === 'form.inscricao_projeto');
-
-function getInitialEnrollments(): EnrollmentListItem[] {
-  return BENEFICIARIES.flatMap((beneficiary) =>
-    beneficiary.enrollments.map((enrollment) => ({
-      id: enrollment.id,
-      projectId: enrollment.projectId,
-      classroomId: enrollment.classroomId,
-      beneficiaryId: beneficiary.id,
-      beneficiaryName: beneficiary.name,
-      status: enrollment.status,
-      startDate: enrollment.startDate,
-    })),
-  );
-}
-
-function getInitialAttendance(): AttendanceEntry[] {
-  return BENEFICIARIES.flatMap((beneficiary) =>
-    Object.entries(beneficiary.attendance).flatMap(([classroomId, records]) =>
-      records.map((record) => ({
-        ...record,
-        beneficiaryId: beneficiary.id,
-        beneficiaryName: beneficiary.name,
-        classroomId,
-      })),
-    ),
-  );
-}
+type AttendanceDraft = {
+  status: AttendanceRecord['status'];
+  justification: string;
+};
 
 function formatDate(dateIso: string) {
   return new Date(dateIso).toLocaleDateString('pt-BR');
 }
 
-function computeAttendanceRate(records: AttendanceEntry[], classroomId: string, beneficiaryId: string) {
-  const scoped = records.filter((record) => record.classroomId === classroomId && record.beneficiaryId === beneficiaryId);
-  if (scoped.length === 0) return 1;
-  const presentes = scoped.filter((record) => record.status === 'presente').length;
-  return presentes / scoped.length;
+function computeAttendanceRate(records: AttendanceRecord[]) {
+  if (records.length === 0) return 1;
+  const presentes = records.filter((record) => record.status === 'presente').length;
+  return presentes / records.length;
 }
 
 export default function ProjectsPage() {
   const session = useRequirePermission(['projects:read', 'projects:manage']);
-  const [enrollments, setEnrollments] = useState<EnrollmentListItem[]>(() => getInitialEnrollments());
-  const [attendance, setAttendance] = useState<AttendanceEntry[]>(() => getInitialAttendance());
-  const [submissions, setSubmissions] = useState<FormSubmission[]>(INITIAL_FORM_SUBMISSIONS);
-  const [selectedProjectId, setSelectedProjectId] = useState(PROJECTS[0]?.id ?? '');
-  const [selectedClassroomId, setSelectedClassroomId] = useState(PROJECTS[0]?.cohorts[0]?.id ?? '');
+  const { projects, isLoading: loadingProjects } = useProjects();
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string>('');
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [attendanceDraft, setAttendanceDraft] = useState<Record<string, AttendanceDraft>>({});
+  const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  if (session === undefined) {
-    return <LoadingState message="Verificando sessão..." />;
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId),
+    [projects, selectedProjectId],
+  );
+
+  useEffect(() => {
+    if (!selectedProject) return;
+    const defaultCohort = selectedProject.cohorts[0]?.id ?? '';
+    setSelectedClassroomId((current) =>
+      current && selectedProject.cohorts.some((cohort) => cohort.id === current) ? current : defaultCohort,
+    );
+  }, [selectedProject]);
+
+  useEffect(() => {
+    setAttendanceDraft({});
+  }, [selectedClassroomId]);
+
+  const { enrollments, mutateEnrollments } = useEnrollments(selectedProjectId || undefined);
+  const projectEnrollments = useMemo(
+    () => enrollments.filter((enrollment) => enrollment.projectId === selectedProjectId),
+    [enrollments, selectedProjectId],
+  );
+  const classroomEnrollments = useMemo(
+    () =>
+      projectEnrollments.filter((enrollment) =>
+        selectedClassroomId ? enrollment.cohortId === selectedClassroomId : true,
+      ),
+    [projectEnrollments, selectedClassroomId],
+  );
+  const enrollmentIds = useMemo(() => projectEnrollments.map((enrollment) => enrollment.id), [projectEnrollments]);
+  const { attendanceByEnrollment, mutateAttendance } = useAttendance(enrollmentIds);
+
+  const enrollmentSuccessRate = useMemo(() => {
+    if (!selectedProject || selectedProject.capacity === 0) return 0;
+    const active = projectEnrollments.filter((enrollment) => enrollment.status === 'ativa').length;
+    return active / selectedProject.capacity;
+  }, [projectEnrollments, selectedProject]);
+
+  const availableClassrooms = selectedProject?.cohorts ?? [];
+
+  const beneficiariesWithoutEnrollment: string[] = [];
+
+  const notify = (message: string) => {
+    setFeedback(message);
+    window.setTimeout(() => setFeedback(null), 4000);
+  };
+
+  if (session === undefined || loadingProjects) {
+    return <LoadingState message="Carregando dados do projeto..." />;
   }
 
   if (!session) {
     return <LoadingState message="Carregando..." />;
   }
 
-  const selectedProject = PROJECTS.find((project) => project.id === selectedProjectId) ?? PROJECTS[0];
-
-  const projectEnrollments = enrollments.filter((enrollment) => enrollment.projectId === selectedProject?.id);
-
-  const classroomEnrollments = projectEnrollments.filter((enrollment) =>
-    selectedClassroomId ? enrollment.classroomId === selectedClassroomId : true,
-  );
-
-  const beneficiariesWithoutEnrollment = BENEFICIARIES.filter(
-    (beneficiary) => !projectEnrollments.some((enrollment) => enrollment.beneficiaryId === beneficiary.id),
-  );
-
-  const availableClassrooms = selectedProject?.cohorts ?? [];
-
-  const enrollmentSuccessRate = selectedProject
-    ? projectEnrollments.filter((enrollment) => enrollment.status === 'ativa').length / selectedProject.capacity
-    : 0;
-
   const handleEnrollmentSubmit = (data: Record<string, unknown>) => {
-    const beneficiaryName = String(data.nome ?? 'Beneficiária');
-    const beneficiary = BENEFICIARIES.find((item) => item.name === beneficiaryName);
-    const classroomLabel = String(data.turma ?? '');
-    const classroom = selectedProject?.cohorts.find((item) => classroomLabel.includes(item.name));
+    if (!session || !selectedProject) {
+      notify('Sessão inválida ou projeto não selecionado.');
+      return;
+    }
 
-    const enrollment: EnrollmentListItem = {
-      id: `enrollment-${Math.random().toString(36).slice(2, 8)}`,
-      projectId: selectedProject?.id ?? 'project-costura',
-      classroomId: classroom?.id ?? selectedProject?.cohorts[0]?.id ?? 'classroom-temp',
-      beneficiaryId: beneficiary?.id ?? `beneficiary-temp-${Date.now()}`,
-      beneficiaryName,
-      status: 'ativa',
+    const cohortId = selectedClassroomId || selectedProject.cohorts[0]?.id || '';
+    if (!cohortId) {
+      notify('Selecione uma turma para registrar a matrícula.');
+      return;
+    }
+
+    const beneficiaryName = String(data.nome ?? '').trim() || 'Beneficiária';
+    const beneficiaryId =
+      String(data.codigo_matricula ?? '').trim() || `beneficiary-${Math.random().toString(36).slice(2, 8)}`;
+
+    const optimisticEnrollment: EnrollmentSummary = {
+      id: `enrollment-${Math.random().toString(36).slice(2, 10)}`,
+      projectId: selectedProject.id,
+      cohortId,
       startDate: new Date().toISOString(),
+      status: 'pendente',
+      agreementsAccepted: Boolean(data.acordos),
+      beneficiary: {
+        id: beneficiaryId,
+        name: beneficiaryName,
+      },
     };
 
-    setEnrollments((prev) => [...prev, enrollment]);
+    const snapshot = [...enrollments];
+    mutateEnrollments({ data: [...snapshot, optimisticEnrollment] }, false);
+
     if (enrollmentSchema) {
       setSubmissions((prev) => [
         ...prev,
@@ -136,42 +154,115 @@ export default function ProjectsPage() {
         },
       ]);
     }
-    setFeedback('Matrícula registrada com sucesso e formulário armazenado.');
-    setTimeout(() => setFeedback(null), 4000);
+
+    void (async () => {
+      try {
+        await postJson(
+          '/enrollments',
+          {
+            projectId: selectedProject.id,
+            cohortId,
+            beneficiary: {
+              id: beneficiaryId,
+              name: beneficiaryName,
+              birthDate: data.data_nascimento,
+              contact: data.contato,
+            },
+            agreementsAccepted: Boolean(data.acordos),
+            schedule: {
+              turno: data.turno,
+              horario: data.horario,
+            },
+          },
+          session.token,
+        );
+        await mutateEnrollments();
+        notify('Matrícula registrada com sucesso e sincronizada com a API.');
+      } catch (error) {
+        await mutateEnrollments({ data: snapshot }, false);
+        notify('Não foi possível registrar a matrícula. Tente novamente.');
+      }
+    })();
   };
 
-  const handleAttendanceSubmit = () => {
-    classroomEnrollments.forEach((enrollment) => {
-      const element = document.getElementById(`attendance-${enrollment.beneficiaryId}`) as HTMLSelectElement | null;
-      if (!element) return;
-      const status = element.value as AttendanceRecord['status'];
-      const justificationInput = document.getElementById(
-        `attendance-justification-${enrollment.beneficiaryId}`,
-      ) as HTMLInputElement | null;
-      const justification = justificationInput?.value ? justificationInput.value : undefined;
+  const handleAttendanceDraftChange = (
+    enrollmentId: string,
+    partial: Partial<AttendanceDraft>,
+  ) => {
+    setAttendanceDraft((prev) => {
+      const current = prev[enrollmentId] ?? { status: 'presente', justification: '' };
+      return {
+        ...prev,
+        [enrollmentId]: {
+          status: partial.status ?? current.status,
+          justification: partial.justification ?? current.justification,
+        },
+      };
+    });
+  };
 
-      const newEntry: AttendanceEntry = {
-        id: `att-${Math.random().toString(36).slice(2, 8)}`,
-        beneficiaryId: enrollment.beneficiaryId,
-        beneficiaryName: enrollment.beneficiaryName,
-        classroomId: enrollment.classroomId,
+  const handleAttendanceSubmit = async () => {
+    if (!session) {
+      notify('Sessão inválida.');
+      return;
+    }
+
+    if (classroomEnrollments.length === 0) {
+      notify('Nenhuma matrícula nesta turma para registrar presença.');
+      return;
+    }
+
+    const snapshot: AttendanceMap = Object.fromEntries(
+      Object.entries(attendanceByEnrollment).map(([id, records]) => [id, [...records]]),
+    );
+
+    const updates = classroomEnrollments.map((enrollment) => {
+      const draft = attendanceDraft[enrollment.id] ?? { status: 'presente', justification: '' };
+      const record: AttendanceRecord = {
+        id: `attendance-${Math.random().toString(36).slice(2, 10)}`,
         date: attendanceDate,
-        status,
-        justification: justification && justification.length > 0 ? justification : undefined,
+        status: draft.status,
+        justification: draft.justification.trim() ? draft.justification.trim() : undefined,
         recordedBy: session.user.name,
       };
-
-      setAttendance((prev) => [...prev, newEntry]);
+      return { enrollmentId: enrollment.id, record };
     });
-    setFeedback('Presenças registradas e assiduidade recalculada.');
-    setTimeout(() => setFeedback(null), 4000);
+
+    const optimistic: AttendanceMap = { ...snapshot };
+    updates.forEach(({ enrollmentId, record }) => {
+      const list = optimistic[enrollmentId] ? [...optimistic[enrollmentId]] : [];
+      list.push(record);
+      optimistic[enrollmentId] = list;
+    });
+
+    await mutateAttendance(optimistic, false);
+
+    try {
+      await Promise.all(
+        updates.map(({ enrollmentId, record }) =>
+          postJson(
+            `/enrollments/${enrollmentId}/attendance`,
+            { date: record.date, status: record.status, justification: record.justification },
+            session.token,
+          ),
+        ),
+      );
+      await mutateAttendance();
+      setAttendanceDraft({});
+      notify('Presenças registradas com sucesso.');
+    } catch (error) {
+      await mutateAttendance(snapshot, false);
+      notify('Não foi possível salvar as presenças. Verifique sua conexão e tente novamente.');
+    }
   };
+
+  const primarySidebar = useMemo(() => (session ? <PrimarySidebar session={session} /> : null), [session]);
 
   return (
     <Shell
       title="Gestão de projetos e presenças"
       description="Acompanhe capacidades, matrículas, assiduidade e formulários operacionais dos projetos do IMM."
-      sidebar={<PrimarySidebar session={session} />}
+      sidebar={primarySidebar}
     >
       {feedback && (
         <div className="rounded-3xl border border-emerald-300/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
@@ -181,7 +272,7 @@ export default function ProjectsPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <ProjectHighlights
-          projects={PROJECTS}
+          projects={projects}
           selectedProject={selectedProject}
           onSelect={setSelectedProjectId}
           enrollmentRate={enrollmentSuccessRate}
@@ -267,32 +358,40 @@ export default function ProjectsPage() {
             )}
 
             {classroomEnrollments.map((enrollment) => {
-              const rate = computeAttendanceRate(attendance, enrollment.classroomId, enrollment.beneficiaryId);
+              const records = attendanceByEnrollment[enrollment.id] ?? [];
+              const rate = computeAttendanceRate(records);
+              const draft = attendanceDraft[enrollment.id] ?? { status: 'presente', justification: '' };
+
               return (
                 <div
                   key={enrollment.id}
                   className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 md:flex-row md:items-center md:justify-between"
                 >
                   <div>
-                    <p className="text-base font-semibold text-white">{enrollment.beneficiaryName}</p>
+                    <p className="text-base font-semibold text-white">{enrollment.beneficiary.name}</p>
                     <p className="text-xs text-white/60">
                       Início em {formatDate(enrollment.startDate)} · Assiduidade: {(rate * 100).toFixed(0)}%
                     </p>
                   </div>
                   <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
                     <select
-                      id={`attendance-${enrollment.beneficiaryId}`}
+                      value={draft.status}
+                      onChange={(event) =>
+                        handleAttendanceDraftChange(enrollment.id, { status: event.target.value as AttendanceRecord['status'] })
+                      }
                       className="w-full rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-white focus:border-cyan-300 focus:outline-none md:max-w-[180px]"
-                      defaultValue="presente"
                     >
                       <option value="presente">Presente</option>
                       <option value="ausente">Ausente</option>
                       <option value="justificado">Justificada</option>
                     </select>
                     <Input
-                      id={`attendance-justification-${enrollment.beneficiaryId}`}
                       label="Justificativa (opcional)"
                       placeholder="Descreva a justificativa"
+                      value={draft.justification}
+                      onChange={(event) =>
+                        handleAttendanceDraftChange(enrollment.id, { justification: event.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -307,11 +406,12 @@ export default function ProjectsPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <EnrollmentTable enrollments={projectEnrollments} project={selectedProject} attendance={attendance} />
-        <BeneficiaryPipeline
-          beneficiaries={beneficiariesWithoutEnrollment.map((beneficiary) => beneficiary.name)}
+        <EnrollmentTable
+          enrollments={projectEnrollments}
           project={selectedProject}
+          attendance={attendanceByEnrollment}
         />
+        <BeneficiaryPipeline beneficiaries={beneficiariesWithoutEnrollment} project={selectedProject} />
       </section>
     </Shell>
   );
@@ -388,9 +488,9 @@ function ProjectHighlights({ projects, selectedProject, onSelect, enrollmentRate
 }
 
 interface EnrollmentTableProps {
-  enrollments: EnrollmentListItem[];
+  enrollments: EnrollmentSummary[];
   project?: ProjectSummary;
-  attendance: AttendanceEntry[];
+  attendance: AttendanceMap;
 }
 
 function EnrollmentTable({ enrollments, project, attendance }: EnrollmentTableProps) {
@@ -415,16 +515,14 @@ function EnrollmentTable({ enrollments, project, attendance }: EnrollmentTablePr
           </thead>
           <tbody className="divide-y divide-white/10">
             {enrollments.map((enrollment) => {
-              const cohort = project?.cohorts.find((item) => item.id === enrollment.classroomId);
-              const records = attendance.filter(
-                (record) => record.beneficiaryId === enrollment.beneficiaryId && record.classroomId === enrollment.classroomId,
-              );
-              const attended = records.filter((record) => record.status === 'presente').length;
-              const percent = records.length > 0 ? Math.round((attended / records.length) * 100) : 100;
+              const cohort = project?.cohorts.find((item) => item.id === enrollment.cohortId);
+              const records = attendance[enrollment.id] ?? [];
+              const percent = Math.round(computeAttendanceRate(records) * 100);
+
               return (
                 <tr key={enrollment.id}>
-                  <td className="py-2 pr-4 text-white">{enrollment.beneficiaryName}</td>
-                  <td className="py-2 pr-4">{cohort ? cohort.name : enrollment.classroomId}</td>
+                  <td className="py-2 pr-4 text-white">{enrollment.beneficiary.name}</td>
+                  <td className="py-2 pr-4">{cohort ? cohort.name : enrollment.cohortId}</td>
                   <td className="py-2 pr-4">{formatDate(enrollment.startDate)}</td>
                   <td className="py-2 pr-4 capitalize">{enrollment.status}</td>
                   <td className="py-2 pr-4">
@@ -464,7 +562,7 @@ function BeneficiaryPipeline({ beneficiaries, project }: BeneficiaryPipelineProp
       <ul className="space-y-3">
         {beneficiaries.length === 0 && (
           <li className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
-            Todas as beneficiárias ativas já estão matriculadas neste projeto.
+            Lista de espera disponível após integração com o CRM de triagem.
           </li>
         )}
         {beneficiaries.map((beneficiary) => (

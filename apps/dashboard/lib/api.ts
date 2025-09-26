@@ -2,7 +2,14 @@
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
 
-export async function fetchJson(path: string, params: Record<string, unknown> = {}, token?: string | null) {
+interface RequestOptions {
+  params?: Record<string, unknown>;
+  body?: unknown;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+}
+
+async function requestJson(path: string, options: RequestOptions = {}, token?: string | null) {
+  const { params = {}, body, method = 'GET' } = options;
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
@@ -15,11 +22,13 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
 
   const url = `${API_URL}${path}${search.toString() ? `?${search.toString()}` : ''}`;
   const response = await fetch(url, {
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     credentials: 'include',
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -31,6 +40,14 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
     return response.json();
   }
   return response.text();
+}
+
+export async function fetchJson(path: string, params: Record<string, unknown> = {}, token?: string | null) {
+  return requestJson(path, { params }, token);
+}
+
+export async function postJson(path: string, body: unknown, token?: string | null) {
+  return requestJson(path, { body, method: 'POST' }, token);
 }
 
 export async function downloadFile(path: string, params: Record<string, unknown>, token: string, filename: string) {
