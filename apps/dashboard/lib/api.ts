@@ -33,6 +33,34 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
   return response.text();
 }
 
+export async function requestJson(
+  path: string,
+  options: {
+    method?: string;
+    body?: unknown;
+    headers?: Record<string, string>;
+  } = {},
+  token?: string | null,
+) {
+  const url = `${API_URL}${path}`;
+  const body: BodyInit | undefined = (() => {
+    if (options.body === undefined) {
+      return undefined;
+    }
+    if (typeof options.body === 'string') {
+      return options.body;
+    }
+    return JSON.stringify(options.body);
+  })();
+  const response = await fetch(url, {
+    method: options.method ?? 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+    credentials: 'include',
+    body,
   });
 
   if (!response.ok) {
@@ -68,4 +96,15 @@ export async function downloadFile(path: string, params: Record<string, unknown>
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(objectUrl);
+}
+
+export function postJson(path: string, body: unknown, token?: string | null) {
+  return requestJson(
+    path,
+    {
+      method: 'POST',
+      body,
+    },
+    token,
+  );
 }

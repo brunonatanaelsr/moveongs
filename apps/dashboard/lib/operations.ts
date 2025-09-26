@@ -102,6 +102,8 @@ export type ProjectRecord = {
   capacity: number | null;
   createdAt: string;
   updatedAt: string;
+  slug?: string | null;
+  active?: boolean;
 };
 
 export type CohortRecord = {
@@ -112,6 +114,12 @@ export type CohortRecord = {
   capacity: number | null;
   location: string | null;
   educator: string | null;
+  code?: string | null;
+  weekday?: number | null;
+  shift?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  educators?: Array<{ id: string; name: string | null }>;
 };
 
 export type EnrollmentRecord = {
@@ -125,11 +133,48 @@ export type EnrollmentRecord = {
   agreementsAccepted: boolean | null;
   createdAt: string;
   updatedAt: string;
+  beneficiaryName?: string;
+  cohortCode?: string | null;
+  projectId?: string;
+  projectName?: string;
+  enrolledAt?: string | null;
+  terminatedAt?: string | null;
+  terminationReason?: string | null;
+  agreementAcceptance?: Record<string, unknown> | null;
+  attendance?: {
+    totalSessions: number;
+    presentSessions: number;
+    attendanceRate: number | null;
+  };
 };
 
 export type EnrollmentListResponse = {
   data: EnrollmentRecord[];
   meta: PaginationMeta;
+};
+
+export type ActionPlanItemRecord = {
+  id: string;
+  actionPlanId: string;
+  title: string;
+  responsible: string | null;
+  dueDate: string | null;
+  status: string;
+  support: string | null;
+  notes: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ActionPlanRecord = {
+  id: string;
+  beneficiaryId: string;
+  status: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: ActionPlanItemRecord[];
 };
 
 export async function listBeneficiaries(params: PaginationParams, token?: string | null) {
@@ -225,7 +270,19 @@ export async function listBeneficiaryConsents(beneficiaryId: string, token?: str
 
 export async function listProjects(token?: string | null) {
   const response = await fetchJson('/projects', {}, token);
-  return Array.isArray(response?.data) ? (response.data as ProjectRecord[]) : [];
+  const data = Array.isArray(response?.data) ? (response.data as any[]) : [];
+  return data.map((project) => ({
+    id: project.id as string,
+    name: project.name as string,
+    description: (project.description ?? null) as string | null,
+    focus: (project.focus ?? null) as string | null,
+    status: project.active === false ? 'inativo' : 'ativo',
+    capacity: (project.capacity ?? null) as number | null,
+    createdAt: (project.createdAt ?? project.created_at ?? new Date().toISOString()) as string,
+    updatedAt: (project.updatedAt ?? project.updated_at ?? new Date().toISOString()) as string,
+    slug: (project.slug ?? null) as string | null,
+    active: project.active ?? undefined,
+  }));
 }
 
 export async function listProjectCohorts(projectId: string, token?: string | null) {
@@ -233,18 +290,88 @@ export async function listProjectCohorts(projectId: string, token?: string | nul
     return [] as CohortRecord[];
   }
   const response = await fetchJson(`/projects/${projectId}/cohorts`, {}, token);
-  return Array.isArray(response?.data) ? (response.data as CohortRecord[]) : [];
+  const data = Array.isArray(response?.data) ? (response.data as any[]) : [];
+  return data.map((cohort) => {
+    const educatorNames = Array.isArray(cohort.educators)
+      ? cohort.educators
+          .map((educator: any) => educator?.name)
+          .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0)
+          .join(', ')
+      : null;
+
+    const timeRange = cohort.startTime && cohort.endTime ? `${cohort.startTime} - ${cohort.endTime}` : null;
+    const scheduleParts = [cohort.shift ?? null, timeRange].filter(Boolean);
+
+    return {
+      id: cohort.id as string,
+      projectId: cohort.projectId as string,
+      name: (cohort.name ?? cohort.code ?? 'Turma') as string,
+      schedule: scheduleParts.length > 0 ? scheduleParts.join(' • ') : null,
+      capacity: (cohort.capacity ?? null) as number | null,
+      location: (cohort.location ?? null) as string | null,
+      educator: educatorNames,
+      code: (cohort.code ?? null) as string | null,
+      weekday: (cohort.weekday ?? null) as number | null,
+      shift: (cohort.shift ?? null) as string | null,
+      startTime: (cohort.startTime ?? null) as string | null,
+      endTime: (cohort.endTime ?? null) as string | null,
+      educators: Array.isArray(cohort.educators)
+        ? cohort.educators.map((item: any) => ({ id: item?.id as string, name: item?.name ?? null }))
+        : [],
+    } as CohortRecord;
+  });
 }
 
 export async function listEnrollments(params: PaginationParams & { projectId?: string; cohortId?: string }, token?: string | null) {
   const response = await fetchJson('/enrollments', params, token);
-  const data = Array.isArray(response?.data) ? (response.data as EnrollmentRecord[]) : [];
+  const rawData = Array.isArray(response?.data) ? (response.data as any[]) : [];
+  const data = rawData.map((item) => ({
+    id: item.id as string,
+    beneficiaryId: item.beneficiaryId as string,
+    cohortId: item.cohortId as string,
+    status: item.status as string,
+    startDate: (item.enrolledAt ?? null) as string | null,
+    endDate: (item.terminatedAt ?? null) as string | null,
+    disengagementReason: (item.terminationReason ?? null) as string | null,
+    agreementsAccepted: item.agreementAcceptance ? true : null,
+    createdAt: (item.createdAt ?? new Date().toISOString()) as string,
+    updatedAt: (item.updatedAt ?? new Date().toISOString()) as string,
+    beneficiaryName: item.beneficiaryName ?? undefined,
+    cohortCode: item.cohortCode ?? null,
+    projectId: item.projectId ?? undefined,
+    projectName: item.projectName ?? undefined,
+    enrolledAt: item.enrolledAt ?? null,
+    terminatedAt: item.terminatedAt ?? null,
+    terminationReason: item.terminationReason ?? null,
+    agreementAcceptance: item.agreementAcceptance ?? null,
+    attendance: item.attendance ?? undefined,
+  }) as EnrollmentRecord);
   const meta = (response?.meta as PaginationMeta | undefined) ?? {
     limit: params.limit ?? 50,
     offset: params.offset ?? 0,
     count: data.length,
   };
   return { data, meta };
+}
+
+export async function createEnrollment(
+  payload: { beneficiaryId: string; cohortId: string; enrolledAt?: string; status?: string },
+  token?: string | null,
+) {
+  const response = await requestJson(
+    '/enrollments',
+    {
+      method: 'POST',
+      body: {
+        beneficiaryId: payload.beneficiaryId,
+        cohortId: payload.cohortId,
+        enrolledAt: payload.enrolledAt,
+        status: payload.status,
+      },
+    },
+    token,
+  );
+  return response?.enrollment as EnrollmentRecord | undefined;
 }
 
 export async function updateEnrollment(
@@ -276,4 +403,89 @@ export async function recordAttendance(
     },
     token,
   );
+}
+
+export async function listActionPlans(
+  beneficiaryId: string,
+  params: { status?: string } = {},
+  token?: string | null,
+) {
+  if (!beneficiaryId) {
+    return [] as ActionPlanRecord[];
+  }
+  const response = await fetchJson(`/beneficiaries/${beneficiaryId}/action-plans`, params, token);
+  const data = Array.isArray(response?.data) ? (response.data as any[]) : [];
+  return data.map((plan) => ({
+    ...plan,
+    items: Array.isArray(plan.items) ? plan.items : [],
+  })) as ActionPlanRecord[];
+}
+
+export async function createActionPlan(
+  payload: { beneficiaryId: string; status?: string },
+  token?: string | null,
+) {
+  const response = await requestJson(
+    '/action-plans',
+    {
+      method: 'POST',
+      body: payload,
+    },
+    token,
+  );
+  const plan = response?.plan as ActionPlanRecord | undefined;
+  if (!plan) return undefined;
+  return { ...plan, items: Array.isArray(plan.items) ? plan.items : [] };
+}
+
+export async function createActionPlanItem(
+  actionPlanId: string,
+  payload: {
+    title: string;
+    responsible?: string | null;
+    dueDate?: string | null;
+    status?: string;
+    support?: string | null;
+    notes?: string | null;
+  },
+  token?: string | null,
+) {
+  const response = await requestJson(
+    `/action-plans/${actionPlanId}/items`,
+    {
+      method: 'POST',
+      body: payload,
+    },
+    token,
+  );
+  const plan = response?.plan as ActionPlanRecord | undefined;
+  if (!plan) return undefined;
+  return { ...plan, items: Array.isArray(plan.items) ? plan.items : [] };
+}
+
+export async function updateActionPlanItem(
+  actionPlanId: string,
+  itemId: string,
+  payload: {
+    title?: string;
+    responsible?: string | null;
+    dueDate?: string | null;
+    status?: string;
+    support?: string | null;
+    notes?: string | null;
+    completedAt?: string | null;
+  },
+  token?: string | null,
+) {
+  const response = await requestJson(
+    `/action-plans/${actionPlanId}/items/${itemId}`,
+    {
+      method: 'PATCH',
+      body: payload,
+    },
+    token,
+  );
+  const plan = response?.plan as ActionPlanRecord | undefined;
+  if (!plan) return undefined;
+  return { ...plan, items: Array.isArray(plan.items) ? plan.items : [] };
 }
