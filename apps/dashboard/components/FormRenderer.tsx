@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import type { FormSchema, FormSection } from '../types/operations';
+import type { FormSchema, FormSection } from '../types/form-schema';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
