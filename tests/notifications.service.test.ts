@@ -298,10 +298,10 @@ describe('notification service', () => {
     await waitForNotificationQueue();
 
     const metrics = getNotificationMetricsSnapshot();
-    expect(metrics.email.delivered).toBeGreaterThanOrEqual(1);
-    expect(metrics.whatsapp.delivered).toBeGreaterThanOrEqual(1);
+    expect(metrics.email.delivered).toBe(1);
+    expect(metrics.whatsapp.delivered).toBe(1);
     expect(metrics.webhook.delivered).toBe(0);
-    expect(metrics.email.averageProcessingTimeMs).toBeGreaterThanOrEqual(0);
+    expect(metrics.email.averageProcessingTimeMs).toBeGreaterThan(0);
   });
 
   it('é idempotente por evento e canal', async () => {
