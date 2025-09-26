@@ -51,15 +51,17 @@ export async function listFeedPosts(params: {
   limit: number;
   offset: number;
   beneficiaryId?: string | null;
-}): Promise<PostRecord[]> {
+}): Promise<{ posts: PostRecord[]; onlyInstitutional: boolean }> {
   let allowedProjects = params.allowedProjectIds;
+  let onlyInstitutional = false;
 
   if (params.beneficiaryId) {
     const beneficiaryProjects = await listBeneficiaryProjects(params.beneficiaryId);
 
     if (beneficiaryProjects.length === 0) {
       // beneficiary without enrollments sees only institutional posts
-      allowedProjects = [];
+      onlyInstitutional = true;
+      allowedProjects = null;
     } else if (allowedProjects && allowedProjects.length > 0) {
       allowedProjects = allowedProjects.filter((projectId) => beneficiaryProjects.includes(projectId));
     } else {
@@ -73,9 +75,10 @@ export async function listFeedPosts(params: {
     includeHidden: params.includeHidden,
     limit: params.limit,
     offset: params.offset,
+    institutionalOnly: onlyInstitutional,
   });
 
-  return posts;
+  return { posts, onlyInstitutional };
 }
 
 export async function getFeedPost(id: string): Promise<{ post: PostRecord; comments: CommentRecord[] }> {

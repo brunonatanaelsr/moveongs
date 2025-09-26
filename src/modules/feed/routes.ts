@@ -43,7 +43,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const includeHidden = shouldIncludeHidden(request, parsed.data.includeHidden);
-    const posts = await listFeedPosts({
+    const { posts, onlyInstitutional } = await listFeedPosts({
       projectId: parsed.data.projectId ?? null,
       allowedProjectIds: request.user.projectScopes?.length ? request.user.projectScopes : null,
       includeHidden,
@@ -52,7 +52,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       beneficiaryId: parsed.data.beneficiaryId ?? null,
     });
 
-    return { data: posts };
+    return { data: posts, onlyInstitutional };
   });
 
   app.get('/feed/posts/:id', {

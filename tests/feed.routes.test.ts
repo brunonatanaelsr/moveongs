@@ -156,6 +156,83 @@ describe('Feed routes', () => {
     expect(body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]));
   });
 
+  it('returns only institutional posts for beneficiaries without enrollments', async () => {
+    const adminToken = await login(app, 'admin@imm.local', 'ChangeMe123!');
+
+    const projectId = randomUUID();
+    await pool.query(`insert into projects (id, name) values ($1, 'Projeto Benef Teste')`, [projectId]);
+
+    const institutionalPost = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      payload: {
+        body: 'Comunicado geral para todas',
+      },
+    });
+    expect(institutionalPost.statusCode).toBe(201);
+    const institutionalPostId = institutionalPost.json().post.id as string;
+
+    const projectPost = await app.inject({
+      method: 'POST',
+      url: '/feed/posts',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      payload: {
+        projectId,
+        body: 'Atualização exclusiva do projeto',
+        visibility: 'project',
+      },
+    });
+    expect(projectPost.statusCode).toBe(201);
+    const projectPostId = projectPost.json().post.id as string;
+
+    const beneficiaryId = randomUUID();
+    await pool.query(
+      `insert into beneficiaries (id, full_name) values ($1, 'Benef sem turma')`,
+      [beneficiaryId],
+    );
+
+    const password = 'BenefNoEnroll123!';
+    const passwordHash = await hash(password, 12);
+    const beneficiaryUserId = randomUUID();
+    await pool.query(
+      `insert into users (id, name, email, password_hash) values ($1, 'Benef sem turma', 'benef.no.enroll@imm.local', $2)`,
+      [beneficiaryUserId, passwordHash],
+    );
+
+    await pool.query(
+      `insert into user_profiles (user_id, display_name) values ($1, 'Benef sem turma')`,
+      [beneficiaryUserId],
+    );
+
+    const { rows: roleRows } = await pool.query<{ id: number }>(
+      `select id from roles where slug = 'beneficiaria'`,
+    );
+    const roleId = roleRows[0]?.id;
+    expect(roleId).toBeDefined();
+
+    await pool.query(
+      `insert into user_roles (id, user_id, role_id, project_id) values ($1, $2, $3, null)`,
+      [randomUUID(), beneficiaryUserId, roleId],
+    );
+
+    const beneficiaryToken = await login(app, 'benef.no.enroll@imm.local', password);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/feed/posts?beneficiaryId=${beneficiaryId}`,
+      headers: { Authorization: `Bearer ${beneficiaryToken}` },
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.onlyInstitutional).toBe(true);
+    const posts = body.data as Array<{ id: string; project: { id: string } | null }>;
+    expect(posts.some((post) => post.id === institutionalPostId)).toBe(true);
+    expect(posts.some((post) => post.id === projectPostId)).toBe(false);
+    expect(posts.every((post) => post.project === null)).toBe(true);
+  });
+
   it('blocks project posts when beneficiaries lack LGPD consent', async () => {
     const { projectId, beneficiaryId } = await createProjectWithEnrollment();
     const token = await login(app, 'admin@imm.local', 'ChangeMe123!');
