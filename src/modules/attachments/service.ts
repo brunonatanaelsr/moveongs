@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile, saveFile, deleteFile } from './storage';
 import {
   AttachmentRecord,
+  AttachmentScanStatus,
   deleteAttachment,
   getAttachmentById,
   insertAttachment,
@@ -11,6 +12,7 @@ import {
 import { AppError } from '../../shared/errors';
 import { recordAuditLog } from '../../shared/audit';
 import { getEnv } from '../../config/env';
+import { scanAttachmentBuffer } from './antivirus';
 
 const DEFAULT_ALLOWED_MIME_TYPES = [
   'image/png',
@@ -64,9 +66,33 @@ export async function uploadAttachment(params: {
   validateUpload(params.buffer, params.mimeType);
 
   const checksum = createHash('sha256').update(params.buffer).digest('hex');
+  const scanResult = await scanAttachmentBuffer({
+    buffer: params.buffer,
+    fileName: params.filename ?? null,
+    mimeType: params.mimeType ?? null,
+    checksum,
+    sizeBytes: params.buffer.length,
+  });
+
+  if (scanResult.status === 'infected') {
+    throw new AppError(
+      'Uploaded file was rejected after antivirus scan detected a threat',
+      422,
+      scanResult.rawPayload ? { scan: scanResult.rawPayload } : undefined,
+    );
+  }
+
+  if (scanResult.status === 'failed') {
+    const env = getEnv();
+    if (env.ANTIVIRUS_ALLOW_ON_ERROR !== 'true') {
+      throw new AppError('Unable to scan uploaded file for threats. Please try again later.', 503);
+    }
+  }
+
   const saved = await saveFile(params.buffer, params.filename ?? undefined, params.mimeType ?? null);
   const sanitizedName = params.filename ? path.basename(params.filename) : saved.fileName;
 
+  const scanStatus: AttachmentScanStatus = scanResult.status;
   const attachment = await insertAttachment({
     ownerType: params.ownerType,
     ownerId: params.ownerId,
@@ -76,6 +102,13 @@ export async function uploadAttachment(params: {
     sizeBytes: params.buffer.length,
     checksum,
     uploadedBy: params.uploadedBy ?? null,
+    scanStatus,
+    scanSignature: scanResult.signature ?? null,
+    scanEngine: scanResult.engine ?? null,
+    scanStartedAt:
+      scanResult.startedAt ?? (scanStatus === 'skipped' || scanStatus === 'pending' ? new Date().toISOString() : null),
+    scanCompletedAt: scanResult.completedAt ?? (scanStatus === 'clean' ? new Date().toISOString() : null),
+    scanError: scanResult.error ?? null,
   });
 
   await recordAuditLog({

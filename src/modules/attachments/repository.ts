@@ -1,6 +1,8 @@
 import { query, withTransaction } from '../../db';
 import { AppError, NotFoundError } from '../../shared/errors';
 
+export type AttachmentScanStatus = 'clean' | 'infected' | 'pending' | 'failed' | 'skipped';
+
 export type AttachmentRecord = {
   id: string;
   ownerType: string;
@@ -12,6 +14,12 @@ export type AttachmentRecord = {
   checksum: string | null;
   uploadedBy: string | null;
   createdAt: string;
+  scanStatus: AttachmentScanStatus;
+  scanSignature: string | null;
+  scanEngine: string | null;
+  scanStartedAt: string | null;
+  scanCompletedAt: string | null;
+  scanError: string | null;
 };
 
 function mapAttachment(row: any): AttachmentRecord {
@@ -26,6 +34,12 @@ function mapAttachment(row: any): AttachmentRecord {
     checksum: row.checksum ?? null,
     uploadedBy: row.uploaded_by ?? null,
     createdAt: row.created_at.toISOString(),
+    scanStatus: row.scan_status ?? 'skipped',
+    scanSignature: row.scan_signature ?? null,
+    scanEngine: row.scan_engine ?? null,
+    scanStartedAt: row.scan_started_at ? row.scan_started_at.toISOString() : null,
+    scanCompletedAt: row.scan_completed_at ? row.scan_completed_at.toISOString() : null,
+    scanError: row.scan_error ?? null,
   };
 }
 
@@ -38,12 +52,19 @@ export async function insertAttachment(params: {
   sizeBytes?: number | null;
   checksum?: string | null;
   uploadedBy?: string | null;
+  scanStatus: AttachmentScanStatus;
+  scanSignature?: string | null;
+  scanEngine?: string | null;
+  scanStartedAt?: string | null;
+  scanCompletedAt?: string | null;
+  scanError?: string | null;
 }): Promise<AttachmentRecord> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `insert into attachments (
-         owner_type, owner_id, file_path, file_name, mime_type, size_bytes, checksum, uploaded_by
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8)
+         owner_type, owner_id, file_path, file_name, mime_type, size_bytes, checksum, uploaded_by,
+         scan_status, scan_signature, scan_engine, scan_started_at, scan_completed_at, scan_error
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        returning *`,
       [
         params.ownerType,
@@ -54,6 +75,12 @@ export async function insertAttachment(params: {
         params.sizeBytes ?? null,
         params.checksum ?? null,
         params.uploadedBy ?? null,
+        params.scanStatus,
+        params.scanSignature ?? null,
+        params.scanEngine ?? null,
+        params.scanStartedAt ? new Date(params.scanStartedAt) : null,
+        params.scanCompletedAt ? new Date(params.scanCompletedAt) : null,
+        params.scanError ?? null,
       ],
     );
 

@@ -87,7 +87,8 @@ export async function fetchEvolutions(beneficiaryId: string) {
 
 export async function fetchAttachmentsMetadata(beneficiaryId: string) {
   const { rows } = await query(
-    `select id, owner_type, owner_id, file_name, mime_type, size_bytes, created_at
+    `select id, owner_type, owner_id, file_name, mime_type, size_bytes, created_at,
+            scan_status, scan_signature, scan_engine, scan_completed_at, scan_error
        from attachments
       where owner_type = 'beneficiary' and owner_id = $1
       order by created_at desc`,
