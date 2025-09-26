@@ -186,4 +186,27 @@ describe('action plan service notifications', () => {
     expect(updatedItem?.dueDate).toBe(existingItem.dueDate);
     expect(updatedItem?.responsible).toBe(existingItem.responsible);
   });
+
+  it('preserva o dueDate armazenado quando o campo não é enviado na atualização', async () => {
+    const existingItem = createItem({ id: 'item-6', dueDate: '2024-07-15' });
+    getActionItemByIdMock.mockResolvedValue(existingItem);
+
+    const updatedPlan: ActionPlanRecord = {
+      ...basePlan,
+      items: [existingItem],
+    };
+
+    updateActionItemMock.mockResolvedValue(updatedPlan);
+
+    const result = await updateActionItem({
+      actionPlanId: basePlan.id,
+      itemId: existingItem.id,
+      notes: 'Atualizar observações',
+    });
+
+    expect(updateActionItemMock.mock.calls[0][0]).not.toHaveProperty('dueDate');
+
+    const updatedItem = result.items.find((item) => item.id === existingItem.id);
+    expect(updatedItem?.dueDate).toBe(existingItem.dueDate);
+  });
 });
