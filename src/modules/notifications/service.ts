@@ -96,7 +96,6 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
     return;
   }
 
-  const startTime = Date.now();
   switch (job.channel) {
     case 'email':
       await emailAdapter.send(job.payload);
@@ -108,10 +107,8 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
       await webhookAdapter.send(job.payload);
       break;
   }
-  const durationMs = Date.now() - startTime;
 
   state.processedJobKeys.add(job.dedupeKey);
-  metrics.recordSuccess(job.channel, durationMs);
 }, {
   concurrency: queueOptions.concurrency,
   maxAttempts: queueOptions.maxAttempts,
