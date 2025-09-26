@@ -82,7 +82,7 @@ function applyProjectFilters(
     whereParts.push(`${projectColumn} = $${values.length}`);
   } else if (filters.allowedProjectIds && filters.allowedProjectIds.length > 0) {
     values.push(filters.allowedProjectIds);
-    whereParts.push(`${projectColumn} = any($${values.length})`);
+    whereParts.push(`${projectColumn} = any($${values.length}::uuid[])`);
   }
 
   if (filters.cohortId) {
