@@ -264,8 +264,9 @@ export async function updateActionItem(params: {
   completedAt?: string | null;
   userId?: string | null;
 }): Promise<ActionPlanRecord> {
-  let dueDate: Date | null | undefined;
-  if (params.dueDate !== undefined) {
+  const dueDateProvided = Object.prototype.hasOwnProperty.call(params, 'dueDate');
+  let dueDate: Date | null = null;
+  if (dueDateProvided) {
     if (params.dueDate === null) {
       dueDate = null;
     } else {
@@ -308,7 +309,7 @@ export async function updateActionItem(params: {
     repositoryPayload.responsible = params.responsible;
   }
 
-  if (dueDate !== undefined) {
+  if (dueDateProvided) {
     repositoryPayload.dueDate = dueDate;
   }
 

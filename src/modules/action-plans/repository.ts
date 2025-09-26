@@ -283,7 +283,7 @@ export async function updateActionItem(params: {
       pushField('responsible', params.responsible);
     }
 
-    if (params.dueDate !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(params, 'dueDate')) {
       pushField('due_date', params.dueDate);
     }
 
