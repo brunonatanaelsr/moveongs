@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { SESClient } from '@aws-sdk/client-ses';
+import twilio from 'twilio';
 import { getEnv } from '../../config/env';
 import { logger } from '../../config/logger';
 import { JobQueue } from '../../shared/job-queue';
@@ -60,8 +62,41 @@ type QueueOptions = {
 
 const env = getEnv();
 const metrics = new NotificationMetrics();
-const emailAdapter = new EmailNotificationAdapter(metrics, env.NOTIFICATIONS_EMAIL_FROM);
-const whatsappAdapter = new WhatsAppNotificationAdapter(metrics);
+
+const sesClient = new SESClient({
+  region: env.NOTIFICATIONS_EMAIL_SES_REGION,
+  credentials: env.NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID && env.NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY
+    ? {
+        accessKeyId: env.NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID,
+        secretAccessKey: env.NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY,
+      }
+    : undefined,
+});
+
+const whatsappClient = twilio(
+  env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID,
+  env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN,
+);
+
+const whatsappFrom = env.NOTIFICATIONS_WHATSAPP_FROM.startsWith('whatsapp:')
+  ? env.NOTIFICATIONS_WHATSAPP_FROM
+  : `whatsapp:${env.NOTIFICATIONS_WHATSAPP_FROM}`;
+
+if (env.NODE_ENV === 'test') {
+  sesClient.send = (async () => ({
+    MessageId: randomUUID(),
+    $metadata: { httpStatusCode: 200 },
+  })) as typeof sesClient.send;
+
+  whatsappClient.messages.create = (async (params) => ({
+    sid: randomUUID(),
+    status: 'queued',
+    to: params.to,
+  })) as typeof whatsappClient.messages.create;
+}
+
+const emailAdapter = new EmailNotificationAdapter(metrics, env.NOTIFICATIONS_EMAIL_FROM, sesClient);
+const whatsappAdapter = new WhatsAppNotificationAdapter(metrics, whatsappFrom, whatsappClient);
 const webhookAdapter = new WebhookNotificationAdapter(metrics);
 
 const emailRecipients = (env.NOTIFICATIONS_EMAIL_RECIPIENTS ?? '')
@@ -232,6 +267,8 @@ export const __testing = {
   whatsappAdapter,
   webhookAdapter,
   metrics,
+  emailClient: sesClient,
+  whatsappClient,
   get processedJobKeys() {
     return state.processedJobKeys;
   },

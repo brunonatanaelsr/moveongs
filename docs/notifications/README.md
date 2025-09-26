@@ -5,12 +5,14 @@ Este módulo coordena os disparos automáticos de notificações externas quando
 ## Canais suportados
 
 ### E-mail
-- Adapter `EmailNotificationAdapter` gera mensagens textuais e registra histórico de disparo (ID, assunto, destinatários e timestamp) para auditoria rápida.【F:src/modules/notifications/adapters/email-adapter.ts†L7-L47】
-- O remetente vem de `NOTIFICATIONS_EMAIL_FROM` e os destinatários podem ser informados por evento ou via configuração padrão (`NOTIFICATIONS_EMAIL_RECIPIENTS`).【F:src/modules/notifications/service.ts†L33-L48】【F:src/modules/notifications/service.ts†L69-L90】
+- Adapter `EmailNotificationAdapter` usa o AWS SES (`SendEmailCommand`) para entregar mensagens textuais, preservando o histórico de disparo (ID do SES, assunto, destinatários e timestamp) para auditoria rápida.【F:src/modules/notifications/adapters/email-adapter.ts†L1-L84】
+- O remetente vem de `NOTIFICATIONS_EMAIL_FROM` e os destinatários podem ser informados por evento ou via configuração padrão (`NOTIFICATIONS_EMAIL_RECIPIENTS`).【F:src/modules/notifications/service.ts†L49-L105】
+- Credenciais e região do SES são lidas das variáveis `NOTIFICATIONS_EMAIL_SES_REGION`, `NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID` e `NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY` (ou das credenciais padrão da AWS quando omitidas).【F:src/config/env.ts†L23-L37】【F:src/modules/notifications/service.ts†L36-L62】
 
 ### WhatsApp
-- Adapter `WhatsAppNotificationAdapter` registra histórico similar, incluindo mensagem e números notificados.【F:src/modules/notifications/adapters/whatsapp-adapter.ts†L7-L44】
-- Os números padrão são lidos da variável `NOTIFICATIONS_WHATSAPP_NUMBERS` (lista separada por vírgula).【F:src/modules/notifications/service.ts†L50-L62】
+- Adapter `WhatsAppNotificationAdapter` integra com o Twilio WhatsApp API, enviando mensagens para cada número do payload e registrando SIDs/status individuais no histórico para auditoria.【F:src/modules/notifications/adapters/whatsapp-adapter.ts†L1-L94】
+- Os números padrão são lidos da variável `NOTIFICATIONS_WHATSAPP_NUMBERS` (lista separada por vírgula) e o remetente `from` vem de `NOTIFICATIONS_WHATSAPP_FROM` (formato `whatsapp:+<código>`).【F:src/modules/notifications/service.ts†L64-L90】
+- O client Twilio é configurado via `NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID` e `NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN`.【F:src/config/env.ts†L23-L39】【F:src/modules/notifications/service.ts†L36-L62】
 
 ### Webhooks
 - Subscrições ficam no registry em memória (`webhook-registry.ts`), com suporte a secrets individuais.【F:src/modules/notifications/webhook-registry.ts†L5-L47】
@@ -41,8 +43,14 @@ Defina as variáveis abaixo (presentes em `.env.example`) para ativar integraç�
 
 ```bash
 NOTIFICATIONS_EMAIL_FROM=alerts@imm.local
+NOTIFICATIONS_EMAIL_SES_REGION=us-east-1
+NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID=aws-access-key
+NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY=aws-secret-key
 NOTIFICATIONS_EMAIL_RECIPIENTS=alerts@example.com
 NOTIFICATIONS_WHATSAPP_NUMBERS=+5511999999999
+NOTIFICATIONS_WHATSAPP_FROM=whatsapp:+14155238886
+NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN=twilio-auth-token
 NOTIFICATIONS_WEBHOOK_TIMEOUT_MS=5000
 NOTIFICATIONS_WEBHOOK_SECRET=change-me
 ```
