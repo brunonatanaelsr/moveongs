@@ -27,7 +27,7 @@ Consulte a especificação funcional & técnica completa (v0.1) em [`docs/specif
    ```bash
    SEED_DEMO_DATA=true npm run seed
    ```
-3. Copie `.env.example` para `.env` e ajuste variáveis (DB, JWT, Redis, etc.).
+3. Copie `.env.example` para `.env` e ajuste variáveis (DB, JWT, Redis, etc.). Em ambientes sem ClamAV disponível mantenha `ANTIVIRUS_ENABLED=false` para não bloquear uploads.
 4. Ambiente de desenvolvimento:
    ```bash
    npm run dev
@@ -44,7 +44,7 @@ Consulte a especificação funcional & técnica completa (v0.1) em [`docs/specif
 * Campos PII/PHI são cifrados no banco com `pgcrypto` e chaves efêmeras geradas via AWS KMS (ver `PII_ENCRYPTION_KMS_KEY_ID`).
 * Secrets de aplicação vivem no AWS Secrets Manager com KMS dedicado (`alias/<projeto>-app`) e podem ser injetados via Vault local (`SECRET_VAULT_PATH`).
 * Respostas HTTP e logs passam por mascaramento automático (`maskSensitiveData`) para ocultar CPF, RG, tokens e contatos.
-* Anexos são armazenados em bucket S3 dedicado com criptografia `aws:kms`, versionamento e bloqueio total de acesso público. Escaneamento antivírus e fluxo operacional documentados em [`docs/security/antivirus-scanning.md`](docs/security/antivirus-scanning.md).
+* Anexos são armazenados em bucket S3 dedicado com criptografia `aws:kms`, versionamento e bloqueio total de acesso público. Escaneamento antivírus (habilitado com `ANTIVIRUS_ENABLED=true` quando houver ClamAV disponível) e fluxo operacional documentados em [`docs/security/antivirus-scanning.md`](docs/security/antivirus-scanning.md).
 
 ## Ambientes via Docker Compose
 
