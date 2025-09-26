@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { env } from '../../config/env';
-import { logger } from '../../observability/logger';
+import { logger } from '../../config/logger';
 import { attachmentsRepository } from './repository';
 import { antivirusScanner } from './antivirus';
 import { storageProvider } from './storage';
