@@ -297,10 +297,16 @@ describe('notification service', () => {
 
     await waitForNotificationQueue();
 
+    const emails = getEmailDispatchHistory();
+    const whatsapps = getWhatsappDispatchHistory();
+    expect(emails).toHaveLength(1);
+    expect(whatsapps).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+
     const metrics = getNotificationMetricsSnapshot();
-    expect(metrics.email.delivered).toBe(1);
-    expect(metrics.whatsapp.delivered).toBe(1);
-    expect(metrics.webhook.delivered).toBe(0);
+    expect(metrics.email.delivered).toBe(emails.length);
+    expect(metrics.whatsapp.delivered).toBe(whatsapps.length);
+    expect(metrics.webhook.delivered).toBe(fetchMock.mock.calls.length);
     expect(metrics.email.averageProcessingTimeMs).toBeGreaterThan(0);
   });
 
@@ -331,6 +337,8 @@ describe('notification service', () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     const metrics = getNotificationMetricsSnapshot();
+    expect(metrics.email.delivered).toBe(emails.length);
+    expect(metrics.whatsapp.delivered).toBe(whatsapps.length);
     expect(metrics.email.duplicates).toBeGreaterThanOrEqual(1);
     expect(metrics.whatsapp.duplicates).toBeGreaterThanOrEqual(1);
   });
