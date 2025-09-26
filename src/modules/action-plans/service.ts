@@ -37,6 +37,13 @@ function parseDateOnly(value: string): Date | null {
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() + 1 !== month
+    || parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
   return parsed;
 }
 

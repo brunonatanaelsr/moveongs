@@ -153,6 +153,20 @@ describe('action plan service notifications', () => {
     );
   });
 
+  it('ignora itens com dueDate inválido ao varrer lembretes', async () => {
+    const invalidDay = createItem({ id: 'item-invalid-day', dueDate: '2024-02-31' });
+    const invalidMonth = createItem({ id: 'item-invalid-month', dueDate: '2024-13-01' });
+
+    listActionItemsDueBeforeMock.mockResolvedValue([
+      { ...invalidDay, beneficiaryId: 'ben-1', beneficiaryName: 'Fulana de Tal' },
+      { ...invalidMonth, beneficiaryId: 'ben-2', beneficiaryName: 'Fulano de Tal' },
+    ]);
+
+    await runActionItemReminderScan(new Date('2024-02-01T00:00:00.000Z'));
+
+    expect(publishNotificationEventMock).not.toHaveBeenCalled();
+  });
+
   it('mantém dueDate e responsável quando não informados na atualização', async () => {
     const existingItem = createItem({ id: 'item-5', dueDate: '2024-06-20', responsible: 'Responsável' });
     getActionItemByIdMock.mockResolvedValue(existingItem);
