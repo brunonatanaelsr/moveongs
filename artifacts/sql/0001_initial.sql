@@ -301,6 +301,10 @@ create table if not exists attachments (
   size_bytes bigint,
   checksum text,
   uploaded_by uuid references users(id),
+  antivirus_scan_status text,
+  antivirus_scan_signature text,
+  antivirus_scan_message text,
+  antivirus_scanned_at timestamptz,
   created_at timestamptz default now()
 );
 

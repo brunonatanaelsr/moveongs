@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile, saveFile, deleteFile } from './storage';
 import {
   AttachmentRecord,
+  AttachmentScanStatus,
   deleteAttachment,
   getAttachmentById,
   insertAttachment,
@@ -11,6 +12,7 @@ import {
 import { AppError } from '../../shared/errors';
 import { recordAuditLog } from '../../shared/audit';
 import { getEnv } from '../../config/env';
+import { scanAttachment } from './antivirus';
 
 const DEFAULT_ALLOWED_MIME_TYPES = [
   'image/png',
@@ -63,19 +65,37 @@ export async function uploadAttachment(params: {
 
   validateUpload(params.buffer, params.mimeType);
 
+  const sanitizedName = params.filename ? path.basename(params.filename) : null;
+  const scanResult = await scanAttachment({
+    buffer: params.buffer,
+    fileName: sanitizedName,
+    mimeType: params.mimeType ?? undefined,
+  });
+
+  if (scanResult.status === 'infected') {
+    throw new AppError('Uploaded file blocked by antivirus', 422, {
+      signature: scanResult.signature,
+      message: scanResult.message,
+    });
+  }
+
   const checksum = createHash('sha256').update(params.buffer).digest('hex');
-  const saved = await saveFile(params.buffer, params.filename ?? undefined, params.mimeType ?? null);
-  const sanitizedName = params.filename ? path.basename(params.filename) : saved.fileName;
+  const saved = await saveFile(params.buffer, sanitizedName ?? undefined, params.mimeType ?? null);
+  const finalFileName = sanitizedName ?? saved.fileName;
 
   const attachment = await insertAttachment({
     ownerType: params.ownerType,
     ownerId: params.ownerId,
     filePath: saved.filePath,
-    fileName: sanitizedName,
+    fileName: finalFileName,
     mimeType: params.mimeType ?? null,
     sizeBytes: params.buffer.length,
     checksum,
     uploadedBy: params.uploadedBy ?? null,
+    antivirusScanStatus: scanResult.status as AttachmentScanStatus,
+    antivirusScanSignature: scanResult.signature ?? null,
+    antivirusScanMessage: scanResult.message ?? null,
+    antivirusScannedAt: scanResult.scannedAt,
   });
 
   await recordAuditLog({

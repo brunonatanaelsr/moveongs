@@ -20,6 +20,7 @@ Consulte a especificação funcional & técnica completa (v0.1) em [`docs/specif
    psql $DATABASE_URL -f artifacts/sql/0001_initial.sql
    psql $DATABASE_URL -f artifacts/sql/0002_rbac_and_profiles.sql
    psql $DATABASE_URL -f artifacts/sql/0003_analytics_views.sql
+   psql $DATABASE_URL -f artifacts/sql/0007_attachment_antivirus.sql
    npm run seed        # usa SEED_DEMO_DATA=false por padrão
    ```
    Para gerar dados demonstrativos (projetos/turmas/presenças/planos):
@@ -43,7 +44,7 @@ Consulte a especificação funcional & técnica completa (v0.1) em [`docs/specif
 * Campos PII/PHI são cifrados no banco com `pgcrypto` e chaves efêmeras geradas via AWS KMS (ver `PII_ENCRYPTION_KMS_KEY_ID`).
 * Secrets de aplicação vivem no AWS Secrets Manager com KMS dedicado (`alias/<projeto>-app`) e podem ser injetados via Vault local (`SECRET_VAULT_PATH`).
 * Respostas HTTP e logs passam por mascaramento automático (`maskSensitiveData`) para ocultar CPF, RG, tokens e contatos.
-* Anexos são armazenados em bucket S3 dedicado com criptografia `aws:kms`, versionamento e bloqueio total de acesso público.
+* Anexos são armazenados em bucket S3 dedicado com criptografia `aws:kms`, versionamento e bloqueio total de acesso público. Escaneamento antivírus e fluxo operacional documentados em [`docs/security/antivirus-scanning.md`](docs/security/antivirus-scanning.md).
 
 ## Ambientes via Docker Compose
 
@@ -95,7 +96,7 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
 
 - `src/app.ts` / `src/modules/*` – API Fastify (auth, usuários, beneficiárias, projetos, matrículas, analytics, etc.).
 - `src/scripts/seed.ts` – seeds idempotentes com opção de dataset demo.
-- `artifacts/sql/` – migrações (`0001` base, `0002` RBAC/perfis sociais, `0003` views de analytics).
+- `artifacts/sql/` – migrações (`0001` base, `0002` RBAC/perfis sociais, `0003` views de analytics, `0007` antivírus de anexos).
 - `artifacts/policies.example.json` – exemplo de mapa de permissões para guards front/back.
 - `frontend_glass_ui_examples/` – componentes React (Tailwind) com visual “liquid glass” + `PermissionGuard`.
 - `tools/pdf-renderer/` – microserviço Node (Playwright + Handlebars) para gerar PDFs (ex.: recibos e dashboard).

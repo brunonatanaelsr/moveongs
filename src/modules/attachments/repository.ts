@@ -1,6 +1,8 @@
 import { query, withTransaction } from '../../db';
 import { AppError, NotFoundError } from '../../shared/errors';
 
+export type AttachmentScanStatus = 'clean' | 'infected' | 'error' | 'pending';
+
 export type AttachmentRecord = {
   id: string;
   ownerType: string;
@@ -12,6 +14,10 @@ export type AttachmentRecord = {
   checksum: string | null;
   uploadedBy: string | null;
   createdAt: string;
+  antivirusScanStatus: AttachmentScanStatus | null;
+  antivirusScanSignature: string | null;
+  antivirusScanMessage: string | null;
+  antivirusScannedAt: string | null;
 };
 
 function mapAttachment(row: any): AttachmentRecord {
@@ -26,6 +32,10 @@ function mapAttachment(row: any): AttachmentRecord {
     checksum: row.checksum ?? null,
     uploadedBy: row.uploaded_by ?? null,
     createdAt: row.created_at.toISOString(),
+    antivirusScanStatus: row.antivirus_scan_status ?? null,
+    antivirusScanSignature: row.antivirus_scan_signature ?? null,
+    antivirusScanMessage: row.antivirus_scan_message ?? null,
+    antivirusScannedAt: row.antivirus_scanned_at ? row.antivirus_scanned_at.toISOString() : null,
   };
 }
 
@@ -38,12 +48,17 @@ export async function insertAttachment(params: {
   sizeBytes?: number | null;
   checksum?: string | null;
   uploadedBy?: string | null;
+  antivirusScanStatus?: AttachmentScanStatus | null;
+  antivirusScanSignature?: string | null;
+  antivirusScanMessage?: string | null;
+  antivirusScannedAt?: Date | string | null;
 }): Promise<AttachmentRecord> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `insert into attachments (
-         owner_type, owner_id, file_path, file_name, mime_type, size_bytes, checksum, uploaded_by
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8)
+         owner_type, owner_id, file_path, file_name, mime_type, size_bytes, checksum, uploaded_by,
+         antivirus_scan_status, antivirus_scan_signature, antivirus_scan_message, antivirus_scanned_at
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        returning *`,
       [
         params.ownerType,
@@ -54,6 +69,10 @@ export async function insertAttachment(params: {
         params.sizeBytes ?? null,
         params.checksum ?? null,
         params.uploadedBy ?? null,
+        params.antivirusScanStatus ?? null,
+        params.antivirusScanSignature ?? null,
+        params.antivirusScanMessage ?? null,
+        params.antivirusScannedAt ?? null,
       ],
     );
 
