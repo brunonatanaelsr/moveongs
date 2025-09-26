@@ -301,6 +301,12 @@ create table if not exists attachments (
   size_bytes bigint,
   checksum text,
   uploaded_by uuid references users(id),
+  scan_status text not null default 'skipped',
+  scan_signature text,
+  scan_engine text,
+  scan_started_at timestamptz,
+  scan_completed_at timestamptz,
+  scan_error text,
   created_at timestamptz default now()
 );
 

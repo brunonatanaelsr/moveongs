@@ -206,13 +206,21 @@ describe('LGPD modules', () => {
       ownerId,
       fileName: 'teste.txt',
       mimeType: 'text/plain',
+      scanStatus: 'skipped',
     });
+    expect(attachment.scanSignature).toBeNull();
+    expect(attachment.scanEngine).toBeNull();
 
     const listed = await listOwnerAttachments({ ownerType: 'beneficiary', ownerId });
-    expect(listed).toEqual(expect.arrayContaining([expect.objectContaining({ id: attachment.id })]));
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: attachment.id, scanStatus: 'skipped', scanSignature: null }),
+      ]),
+    );
 
     const fetched = await loadAttachmentFile(attachment.id);
     expect(fetched.metadata.id).toBe(attachment.id);
+    expect(fetched.metadata.scanStatus).toBe('skipped');
     expect(fetched.buffer.toString('utf-8')).toBe('Arquivo de teste');
 
     const removed = await removeAttachment(attachment.id, userId);

@@ -33,39 +33,6 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
   return response.text();
 }
 
-type RequestJsonOptions = {
-  method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  body?: Record<string, unknown> | FormData;
-  params?: Record<string, unknown>;
-  headers?: Record<string, string>;
-};
-
-export async function requestJson(path: string, options: RequestJsonOptions, token?: string | null) {
-  const { method = 'POST', body, params = {}, headers = {} } = options;
-
-  const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    if (Array.isArray(value)) {
-      value.forEach((v) => search.append(key, String(v)));
-    } else {
-      search.set(key, String(value));
-    }
-  });
-
-  const url = `${API_URL}${path}${search.toString() ? `?${search.toString()}` : ''}`;
-
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-
-  const response = await fetch(url, {
-    method,
-    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
-    headers: {
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    credentials: 'include',
   });
 
   if (!response.ok) {
