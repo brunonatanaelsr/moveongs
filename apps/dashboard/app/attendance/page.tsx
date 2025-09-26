@@ -1,20 +1,43 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { Shell } from '../../components/Shell';
 import { PrimarySidebar } from '../../components/PrimarySidebar';
 import { useRequirePermission } from '../../hooks/useRequirePermission';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { demoBeneficiaries, demoCohorts, demoProjects } from '../../lib/demo-data';
+import {
+  listProjects,
+  listProjectCohorts,
+  listEnrollments,
+  submitAttendanceRecords,
+  type AttendanceFormStatus,
+  type ProjectRecord,
+  type CohortRecord,
+  type EnrollmentListResponse,
+} from '../../lib/operations';
 
-type AttendanceStatus = 'presente' | 'falta_justificada' | 'falta_injustificada' | 'atraso';
+type AttendanceStatus = AttendanceFormStatus;
 
 interface LocalAttendance {
+  enrollmentId: string;
   beneficiaryId: string;
   status: AttendanceStatus;
   justification?: string;
 }
+
+interface ParticipantRow {
+  enrollmentId: string;
+  beneficiaryId: string;
+  name: string;
+  vulnerabilities: string[];
+  enrollmentStatus: string;
+}
+
+type ProjectsResponse = ProjectRecord[];
+type CohortsResponse = CohortRecord[];
+type EnrollmentsResponse = EnrollmentListResponse;
 
 const statusOptions: { value: AttendanceStatus; label: string }[] = [
   { value: 'presente', label: 'Presente' },
@@ -25,51 +48,185 @@ const statusOptions: { value: AttendanceStatus; label: string }[] = [
 
 export default function AttendancePage() {
   const session = useRequirePermission(['attendance:write']);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(demoProjects[0]?.id ?? '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedCohortId, setSelectedCohortId] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [records, setRecords] = useState<Record<string, LocalAttendance>>({});
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const primarySidebar = useMemo(() => (session ? <PrimarySidebar session={session} /> : null), [session]);
-  const cohorts = demoCohorts.filter((cohort) => cohort.projectId === selectedProjectId);
-  const cohort = cohorts.find((item) => item.id === selectedCohortId) ?? cohorts[0];
-  const participants = demoBeneficiaries.filter((beneficiary) => beneficiary.status !== 'desligada');
+
+  const projectsKey = useMemo(() => {
+    if (!session) return null;
+    return ['attendance:projects', session.token] as const;
+  }, [session]);
+
+  const { data: projects } = useSWR<ProjectsResponse>(projectsKey, ([, token]) => listProjects(token));
+
+  useEffect(() => {
+    if (!selectedProjectId && projects?.length) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  const cohortsKey = useMemo(() => {
+    if (!session || !selectedProjectId) return null;
+    return ['attendance:cohorts', selectedProjectId, session.token] as const;
+  }, [session, selectedProjectId]);
+
+  const { data: cohorts } = useSWR<CohortsResponse>(cohortsKey, ([, projectId, token]) => listProjectCohorts(projectId, token));
+
+  const enrollmentsKey = useMemo(() => {
+    if (!session || !selectedProjectId) return null;
+    return ['attendance:enrollments', selectedProjectId, selectedCohortId || 'all', session.token] as const;
+  }, [session, selectedProjectId, selectedCohortId]);
+
+  const { data: enrollmentsData } = useSWR<EnrollmentsResponse | undefined>(
+    enrollmentsKey,
+    ([, projectId, cohortId, token]) =>
+      listEnrollments(
+        {
+          projectId,
+          cohortId: cohortId === 'all' ? undefined : cohortId,
+          activeOnly: true,
+          limit: 200,
+        },
+        token,
+      ),
+  );
+
+  const participants = useMemo<ParticipantRow[]>(() => {
+    const items = enrollmentsData?.data ?? [];
+    return items
+      .filter((enrollment) => enrollment.status !== 'terminated')
+      .map((enrollment) => ({
+        enrollmentId: enrollment.id,
+        beneficiaryId: enrollment.beneficiaryId,
+        name: enrollment.beneficiary?.fullName ?? enrollment.beneficiaryId,
+        vulnerabilities: enrollment.beneficiary?.vulnerabilities ?? [],
+        enrollmentStatus: enrollment.status,
+      }));
+  }, [enrollmentsData]);
+
+  useEffect(() => {
+    setRecords((previous) => {
+      const next: Record<string, LocalAttendance> = {};
+      participants.forEach((participant) => {
+        if (previous[participant.enrollmentId]) {
+          next[participant.enrollmentId] = previous[participant.enrollmentId];
+        }
+      });
+      const previousKeys = Object.keys(previous);
+      const nextKeys = Object.keys(next);
+      if (previousKeys.length === nextKeys.length && previousKeys.every((key) => next[key] === previous[key])) {
+        return previous;
+      }
+      return next;
+    });
+  }, [participants]);
 
   if (session === undefined) {
     return null;
   }
 
-  const handleStatusChange = (beneficiaryId: string, status: AttendanceStatus) => {
+  const handleStatusChange = (participant: ParticipantRow, status: AttendanceStatus) => {
     setRecords((prev) => ({
       ...prev,
-      [beneficiaryId]: {
-        ...prev[beneficiaryId],
-        beneficiaryId,
+      [participant.enrollmentId]: {
+        ...prev[participant.enrollmentId],
+        enrollmentId: participant.enrollmentId,
+        beneficiaryId: participant.beneficiaryId,
         status,
+        justification:
+          status === 'presente' ? undefined : prev[participant.enrollmentId]?.justification,
       },
     }));
   };
 
-  const handleJustificationChange = (beneficiaryId: string, justification: string) => {
+  const handleJustificationChange = (participant: ParticipantRow, justification: string) => {
     setRecords((prev) => ({
       ...prev,
-      [beneficiaryId]: {
-        ...prev[beneficiaryId],
-        beneficiaryId,
-        status: prev[beneficiaryId]?.status ?? 'falta_justificada',
+      [participant.enrollmentId]: {
+        ...prev[participant.enrollmentId],
+        enrollmentId: participant.enrollmentId,
+        beneficiaryId: participant.beneficiaryId,
+        status: prev[participant.enrollmentId]?.status ?? 'falta_justificada',
         justification,
       },
     }));
   };
 
-  const handleSave = () => {
-    alert('Presenças salvas localmente. Integre com a rota /attendance para persistir.');
+  const handleSave = async () => {
+    if (!session) return;
+
+    const selectedRecords = participants
+      .map((participant) => records[participant.enrollmentId])
+      .filter((record): record is LocalAttendance => Boolean(record?.status));
+
+    if (selectedRecords.length === 0) {
+      setFeedback({ type: 'error', message: 'Selecione ao menos um status de presença para registrar.' });
+      return;
+    }
+
+    const invalidJustification = selectedRecords.find(
+      (record) =>
+        (record.status === 'falta_justificada' || record.status === 'falta_injustificada') &&
+        !(record.justification && record.justification.trim().length > 0),
+    );
+
+    if (invalidJustification) {
+      setFeedback({ type: 'error', message: 'Informe uma justificativa para todas as ausências.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setFeedback(null);
+
+    try {
+      const result = await submitAttendanceRecords(
+        selectedRecords.map((record) => ({
+          enrollmentId: record.enrollmentId,
+          beneficiaryId: record.beneficiaryId,
+          status: record.status,
+          justification: record.justification?.trim(),
+          date,
+        })),
+        session.token,
+      );
+
+      if (result.failures.length === 0) {
+        setFeedback({ type: 'success', message: 'Presenças registradas com sucesso.' });
+        setRecords({});
+      } else if (result.successes === 0) {
+        setFeedback({ type: 'error', message: 'Não foi possível registrar as presenças. Tente novamente.' });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: `Alguns registros falharam (${result.failures.length}). Verifique os dados e tente novamente.`,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      setFeedback({ type: 'error', message: 'Erro inesperado ao registrar presenças.' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const summary = statusOptions.map((option) => ({
     status: option.label,
     total: Object.values(records).filter((record) => record.status === option.value).length,
   }));
+
+  const cohort = selectedCohortId
+    ? cohorts?.find((item) => item.id === selectedCohortId)
+    : undefined;
+  const cohortName = selectedCohortId
+    ? cohort?.name ?? 'Turma não selecionada'
+    : cohorts && cohorts.length > 0
+      ? 'Todas as turmas'
+      : 'Turma não selecionada';
 
   return (
     <Shell
@@ -91,19 +248,42 @@ export default function AttendancePage() {
               onChange={(value) => {
                 setSelectedProjectId(value);
                 setSelectedCohortId('');
+                setRecords({});
+                setFeedback(null);
               }}
-              options={demoProjects.map((project) => ({ value: project.id, label: project.name }))}
+              options={(projects ?? []).map((project) => ({ value: project.id, label: project.name }))}
             />
 
             <SelectField
               label="Turma"
               value={selectedCohortId}
-              onChange={setSelectedCohortId}
-              options={[{ value: '', label: 'Selecione' }, ...cohorts.map((item) => ({ value: item.id, label: `${item.name} • ${item.weekday}` }))]}
+              onChange={(value) => {
+                setSelectedCohortId(value);
+                setRecords({});
+                setFeedback(null);
+              }}
+              options={[
+                { value: '', label: 'Todas as turmas' },
+                ...(cohorts ?? []).map((item) => ({ value: item.id, label: item.name })),
+              ]}
             />
 
             <DateField label="Data" value={date} onChange={setDate} />
           </div>
+
+          {feedback && (
+            <div
+              className={`rounded-3xl border p-4 text-sm ${
+                feedback.type === 'success'
+                  ? 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
+                  : 'border-rose-300/40 bg-rose-500/10 text-rose-100'
+              }`}
+              role="status"
+              aria-live="polite"
+            >
+              {feedback.message}
+            </div>
+          )}
 
           <AttendanceTable
             participants={participants}
@@ -113,8 +293,8 @@ export default function AttendancePage() {
           />
 
           <div className="flex flex-wrap gap-3">
-            <Button type="button" onClick={handleSave}>
-              Salvar presença
+            <Button type="button" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Salvando...' : 'Salvar presença'}
             </Button>
             <Button type="button" variant="secondary">
               Exportar para PDF de lista
@@ -122,7 +302,7 @@ export default function AttendancePage() {
           </div>
         </Card>
 
-        <SummaryCard cohortName={cohort?.name ?? 'Turma não selecionada'} summary={summary} />
+        <SummaryCard cohortName={cohortName} summary={summary} />
       </div>
     </Shell>
   );
@@ -169,10 +349,10 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
 }
 
 interface AttendanceTableProps {
-  participants: typeof demoBeneficiaries;
+  participants: ParticipantRow[];
   records: Record<string, LocalAttendance>;
-  onStatusChange: (beneficiaryId: string, status: AttendanceStatus) => void;
-  onJustificationChange: (beneficiaryId: string, justification: string) => void;
+  onStatusChange: (participant: ParticipantRow, status: AttendanceStatus) => void;
+  onJustificationChange: (participant: ParticipantRow, justification: string) => void;
 }
 
 function AttendanceTable({ participants, records, onStatusChange, onJustificationChange }: AttendanceTableProps) {
@@ -188,12 +368,23 @@ function AttendanceTable({ participants, records, onStatusChange, onJustificatio
           </tr>
         </thead>
         <tbody className="divide-y divide-white/10 bg-white/0">
-          {participants.map((beneficiary) => {
-            const record = records[beneficiary.id];
+          {participants.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-4 py-6 text-center text-sm text-white/60">
+                Nenhuma participante encontrada para os filtros selecionados.
+              </td>
+            </tr>
+          )}
+          {participants.map((participant) => {
+            const record = records[participant.enrollmentId];
             return (
-              <tr key={beneficiary.id} className="hover:bg-white/5">
-                <td className="px-4 py-3 text-white">{beneficiary.name}</td>
-                <td className="px-4 py-3 text-xs text-white/60">{beneficiary.vulnerabilities.join(' • ')}</td>
+              <tr key={participant.enrollmentId} className="hover:bg-white/5">
+                <td className="px-4 py-3 text-white">{participant.name}</td>
+                <td className="px-4 py-3 text-xs text-white/60">
+                  {participant.vulnerabilities.length > 0
+                    ? participant.vulnerabilities.join(' • ')
+                    : 'Sem vulnerabilidades registradas'}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
                     {statusOptions.map((option) => {
@@ -202,7 +393,7 @@ function AttendanceTable({ participants, records, onStatusChange, onJustificatio
                         <button
                           key={option.value}
                           type="button"
-                          onClick={() => onStatusChange(beneficiary.id, option.value)}
+                          onClick={() => onStatusChange(participant, option.value)}
                           className={`rounded-full border px-3 py-1 text-xs transition ${
                             isActive
                               ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-100'
@@ -219,7 +410,7 @@ function AttendanceTable({ participants, records, onStatusChange, onJustificatio
                   <input
                     type="text"
                     value={record?.justification ?? ''}
-                    onChange={(event) => onJustificationChange(beneficiary.id, event.target.value)}
+                    onChange={(event) => onJustificationChange(participant, event.target.value)}
                     placeholder="Opcional"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 p-2 text-xs text-white/70 focus:border-emerald-400 focus:outline-none"
                   />
