@@ -157,11 +157,14 @@ export async function listPosts(params: {
   includeHidden: boolean;
   limit: number;
   offset: number;
+  institutionalOnly: boolean;
 }): Promise<PostRecord[]> {
   const values: unknown[] = [];
   const conditions: string[] = [];
 
-  if (params.projectId) {
+  if (params.institutionalOnly) {
+    conditions.push('posts.project_id is null');
+  } else if (params.projectId) {
     values.push(params.projectId);
     conditions.push(`posts.project_id = $${values.length}`);
   } else if (params.allowedProjectIds && params.allowedProjectIds.length > 0) {
