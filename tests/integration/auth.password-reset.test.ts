@@ -7,6 +7,35 @@ import type { FastifyInstance } from 'fastify';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 30000 });
 
+const sendGridMocks = vi.hoisted(() => ({
+  send: vi.fn(async () => [{ statusCode: 202, headers: {} } as any]),
+  setApiKey: vi.fn(),
+}));
+
+const twilioMocks = vi.hoisted(() => {
+  const create = vi.fn(async () => ({ sid: 'SM123', status: 'queued' }));
+  const factory = vi.fn(() => ({ messages: { create } }));
+  class TwilioError extends Error {}
+  return { create, factory, TwilioError };
+});
+
+vi.mock('@sendgrid/mail', () => ({
+  __esModule: true,
+  default: {
+    send: sendGridMocks.send,
+    setApiKey: sendGridMocks.setApiKey,
+  },
+  send: sendGridMocks.send,
+  setApiKey: sendGridMocks.setApiKey,
+}));
+
+vi.mock('twilio', () => ({
+  __esModule: true,
+  default: twilioMocks.factory,
+  Twilio: twilioMocks.factory,
+  TwilioError: twilioMocks.TwilioError,
+}));
+
 const { mem, adapter } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { newDb } = require('pg-mem');
@@ -22,8 +51,18 @@ const { mem, adapter } = vi.hoisted(() => {
   process.env.JWT_EXPIRES_IN = '1h';
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';
   process.env.LOG_LEVEL = 'debug';
+  process.env.NOTIFICATIONS_EMAIL_PROVIDER = 'sendgrid';
+  process.env.NOTIFICATIONS_EMAIL_SENDGRID_API_KEY = 'SG.test-key'.padEnd(24, 'x');
+  process.env.NOTIFICATIONS_EMAIL_FROM = 'alerts@imm.local';
+  process.env.NOTIFICATIONS_EMAIL_DEFAULT_RECIPIENTS = '';
   process.env.NOTIFICATIONS_EMAIL_RECIPIENTS = '';
+  process.env.NOTIFICATIONS_WHATSAPP_PROVIDER = 'twilio';
+  process.env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID = 'AC1234567890';
+  process.env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN = 'secret';
+  process.env.NOTIFICATIONS_WHATSAPP_FROM = 'whatsapp:+14155238886';
+  process.env.NOTIFICATIONS_WHATSAPP_DEFAULT_NUMBERS = '';
   process.env.NOTIFICATIONS_WHATSAPP_NUMBERS = '';
+  process.env.NOTIFICATIONS_WHATSAPP_RATE_LIMIT_PER_SECOND = '5';
   process.env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS = '100';
   return { mem: db, adapter };
 });
@@ -98,6 +137,10 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  sendGridMocks.send.mockClear();
+  sendGridMocks.setApiKey.mockClear();
+  twilioMocks.create.mockClear();
+  twilioMocks.factory.mockClear();
   resetNotificationDispatchHistory();
   await pool.query('delete from password_reset_tokens');
 });

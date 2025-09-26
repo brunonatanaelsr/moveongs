@@ -21,8 +21,22 @@ const envSchema = z.object({
   CACHE_TTL_SECONDS: z.string().regex(/^[0-9]+$/).default('300'),
   UPLOADS_DIR: z.string().default('tmp/uploads'),
   NOTIFICATIONS_EMAIL_FROM: z.string().email().default('alerts@imm.local'),
+  NOTIFICATIONS_EMAIL_PROVIDER: z.enum(['sendgrid']).default('sendgrid'),
+  NOTIFICATIONS_EMAIL_SENDGRID_API_KEY: z
+    .string()
+    .min(20)
+    .default('SG.test-placeholder-key-imm'),
+  NOTIFICATIONS_EMAIL_DEFAULT_RECIPIENTS: z.string().optional(),
   NOTIFICATIONS_EMAIL_RECIPIENTS: z.string().optional(),
+  NOTIFICATIONS_WHATSAPP_PROVIDER: z.enum(['twilio']).default('twilio'),
+  NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID: z
+    .string()
+    .default('AC000000000000000000000000000000'),
+  NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN: z.string().default('test-auth-token'),
+  NOTIFICATIONS_WHATSAPP_FROM: z.string().default('whatsapp:+10000000000'),
+  NOTIFICATIONS_WHATSAPP_DEFAULT_NUMBERS: z.string().optional(),
   NOTIFICATIONS_WHATSAPP_NUMBERS: z.string().optional(),
+  NOTIFICATIONS_WHATSAPP_RATE_LIMIT_PER_SECOND: z.string().regex(/^[0-9]+$/).default('1'),
   NOTIFICATIONS_WEBHOOK_TIMEOUT_MS: z.string().regex(/^[0-9]+$/).default('5000'),
   NOTIFICATIONS_WEBHOOK_SECRET: z.string().optional(),
   OTEL_ENABLED: z.enum(['true', 'false']).default('false'),

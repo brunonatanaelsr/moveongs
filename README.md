@@ -128,9 +128,9 @@ TLS_EMAIL=infra@your-domain.com DATABASE_URL=... REDIS_URL=... JWT_SECRET=... \
 ## Notificações e webhooks
 
 - Configure canais padrão através das variáveis de ambiente:
-  - `NOTIFICATIONS_EMAIL_FROM` (remetente) e `NOTIFICATIONS_EMAIL_RECIPIENTS` (lista separada por vírgula).
-  - `NOTIFICATIONS_WHATSAPP_NUMBERS` para números internacionais (ex.: `+5521999999999`).
-  - `NOTIFICATIONS_WEBHOOK_TIMEOUT_MS` e `NOTIFICATIONS_WEBHOOK_SECRET` para chamadas HTTP assíncronas.
+  - E-mail (SendGrid): `NOTIFICATIONS_EMAIL_SENDGRID_API_KEY`, `NOTIFICATIONS_EMAIL_FROM`, `NOTIFICATIONS_EMAIL_DEFAULT_RECIPIENTS` (lista separada por vírgula).
+  - WhatsApp (Twilio): `NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID`, `NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN`, `NOTIFICATIONS_WHATSAPP_FROM`, `NOTIFICATIONS_WHATSAPP_DEFAULT_NUMBERS` e `NOTIFICATIONS_WHATSAPP_RATE_LIMIT_PER_SECOND`.
+  - Webhooks: `NOTIFICATIONS_WEBHOOK_TIMEOUT_MS` e `NOTIFICATIONS_WEBHOOK_SECRET`.
 - Endpoints protegidos (`/notifications/webhooks`) permitem listar, cadastrar e remover webhooks por evento chave.
 - Eventos de matrículas, presenças e consentimentos alimentam automaticamente fila de envios multi canal.
 - Visão detalhada de arquitetura, observabilidade e reprocessamento em [`docs/notifications/README.md`](docs/notifications/README.md).

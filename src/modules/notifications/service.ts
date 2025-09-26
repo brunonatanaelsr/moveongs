@@ -5,8 +5,18 @@ import { JobQueue } from '../../shared/job-queue';
 import type { NotificationChannel, NotificationEvent } from './types';
 import { getWebhooksForEvent } from './webhook-registry';
 import type { WebhookSubscription } from './webhook-registry';
-import { EmailNotificationAdapter, type EmailNotificationPayload } from './adapters/email-adapter';
-import { WhatsAppNotificationAdapter, type WhatsAppNotificationPayload } from './adapters/whatsapp-adapter';
+import {
+  EmailNotificationAdapter,
+  type EmailNotificationAdapterConfig,
+  type EmailNotificationPayload,
+  type EmailDispatchRecord,
+} from './adapters/email-adapter';
+import {
+  WhatsAppNotificationAdapter,
+  type WhatsAppNotificationAdapterConfig,
+  type WhatsAppNotificationPayload,
+  type WhatsAppDispatchRecord,
+} from './adapters/whatsapp-adapter';
 import { WebhookNotificationAdapter, type WebhookJobPayload } from './adapters/webhook-adapter';
 import { NotificationMetrics, type NotificationMetricsSnapshot } from './metrics';
 
@@ -60,30 +70,54 @@ type QueueOptions = {
 
 const env = getEnv();
 const metrics = new NotificationMetrics();
-const emailAdapter = new EmailNotificationAdapter(metrics, env.NOTIFICATIONS_EMAIL_FROM);
-const whatsappAdapter = new WhatsAppNotificationAdapter(metrics);
+
+const emailAdapter = new EmailNotificationAdapter(metrics, resolveEmailConfig(env));
+const whatsappAdapter = new WhatsAppNotificationAdapter(metrics, resolveWhatsAppConfig(env));
 const webhookAdapter = new WebhookNotificationAdapter(metrics);
 
-const emailRecipients = (env.NOTIFICATIONS_EMAIL_RECIPIENTS ?? '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean);
+const emailDefaultRecipients = parseList(
+  env.NOTIFICATIONS_EMAIL_DEFAULT_RECIPIENTS ?? env.NOTIFICATIONS_EMAIL_RECIPIENTS ?? '',
+);
 
-const whatsappNumbers = (env.NOTIFICATIONS_WHATSAPP_NUMBERS ?? '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean);
+const whatsappDefaultNumbers = parseList(
+  env.NOTIFICATIONS_WHATSAPP_DEFAULT_NUMBERS ?? env.NOTIFICATIONS_WHATSAPP_NUMBERS ?? '',
+);
 
 const webhookTimeoutMs = Number.parseInt(env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS, 10) || 5000;
+
+type NotificationDispatchResult =
+  | {
+    channel: 'email';
+    dedupeKey: string;
+    eventId: string;
+    record: EmailDispatchRecord;
+  }
+  | {
+    channel: 'whatsapp';
+    dedupeKey: string;
+    eventId: string;
+    records: WhatsAppDispatchRecord[];
+  }
+  | {
+    channel: 'webhook';
+    dedupeKey: string;
+    eventId: string;
+    metadata: {
+      subscriptionId: string;
+      url: string;
+    };
+  };
 
 type NotificationServiceState = {
   processedJobKeys: Set<string>;
   deadLetterQueue: NotificationDeadLetter[];
+  dispatchResults: NotificationDispatchResult[];
 };
 
 const state: NotificationServiceState = {
   processedJobKeys: new Set<string>(),
   deadLetterQueue: [],
+  dispatchResults: [],
 };
 
 const queueOptions: QueueOptions = env.NODE_ENV === 'test'
@@ -98,13 +132,32 @@ const notificationQueue = new JobQueue<NotificationQueueJob>(async (job) => {
 
   switch (job.channel) {
     case 'email':
-      await emailAdapter.send(job.payload);
+      storeDispatchResult({
+        channel: 'email',
+        dedupeKey: job.dedupeKey,
+        eventId: job.eventId,
+        record: await emailAdapter.send(job.payload),
+      });
       break;
     case 'whatsapp':
-      await whatsappAdapter.send(job.payload);
+      storeDispatchResult({
+        channel: 'whatsapp',
+        dedupeKey: job.dedupeKey,
+        eventId: job.eventId,
+        records: await whatsappAdapter.send(job.payload),
+      });
       break;
     case 'webhook':
       await webhookAdapter.send(job.payload);
+      storeDispatchResult({
+        channel: 'webhook',
+        dedupeKey: job.dedupeKey,
+        eventId: job.eventId,
+        metadata: {
+          subscriptionId: job.payload.subscription.id,
+          url: job.payload.subscription.url,
+        },
+      });
       break;
   }
 
@@ -142,7 +195,7 @@ export function publishNotificationEvent(event: NotificationEvent) {
   };
 
   const emailMessage = buildEmailMessage(normalizedEvent);
-  const recipients = emailMessage?.recipients ?? emailRecipients;
+  const recipients = emailMessage?.recipients ?? emailDefaultRecipients;
 
   if (emailMessage && recipients.length > 0) {
     const recipientsKey = buildTargetKey(recipients);
@@ -160,14 +213,16 @@ export function publishNotificationEvent(event: NotificationEvent) {
   }
 
   const whatsappMessage = buildWhatsAppMessage(normalizedEvent);
-  if (whatsappMessage && whatsappNumbers.length > 0) {
-    const numbersKey = buildTargetKey(whatsappNumbers);
+  const whatsappTargets = whatsappDefaultNumbers;
+
+  if (whatsappMessage && whatsappTargets.length > 0) {
+    const numbersKey = buildTargetKey(whatsappTargets);
     notificationQueue.enqueue({
       channel: 'whatsapp',
       dedupeKey: buildJobKey('whatsapp', normalizedEvent.id, numbersKey),
       eventId: normalizedEvent.id,
       payload: {
-        numbers: whatsappNumbers,
+        numbers: whatsappTargets,
         message: whatsappMessage,
         eventType: normalizedEvent.type,
         eventId: normalizedEvent.id,
@@ -204,6 +259,7 @@ export function resetNotificationDispatchHistory() {
   webhookAdapter.reset();
   state.processedJobKeys.clear();
   state.deadLetterQueue.length = 0;
+  state.dispatchResults.length = 0;
   metrics.reset();
 }
 
@@ -213,6 +269,10 @@ export function getNotificationMetricsSnapshot(): NotificationMetricsSnapshot {
 
 export function getNotificationDeadLetters(): ReadonlyArray<NotificationDeadLetter> {
   return state.deadLetterQueue;
+}
+
+export function getNotificationDispatchResults(): ReadonlyArray<NotificationDispatchResult> {
+  return state.dispatchResults;
 }
 
 export function retryNotificationDeadLetter(id: string): boolean {
@@ -232,13 +292,13 @@ export const __testing = {
   whatsappAdapter,
   webhookAdapter,
   metrics,
+  state,
   get processedJobKeys() {
     return state.processedJobKeys;
   },
   get deadLetterQueue() {
     return state.deadLetterQueue;
   },
-  state,
 };
 
 function buildJobKey(channel: NotificationChannel, eventId: string, target: string): string {
@@ -256,6 +316,57 @@ function buildWebhookPayload(subscription: WebhookSubscription, event: Notificat
     timeoutMs: webhookTimeoutMs,
     defaultSecret: env.NOTIFICATIONS_WEBHOOK_SECRET ?? null,
   };
+}
+
+function resolveEmailConfig(env: ReturnType<typeof getEnv>): EmailNotificationAdapterConfig {
+  if (env.NOTIFICATIONS_EMAIL_PROVIDER !== 'sendgrid') {
+    throw new Error(`Unsupported email provider: ${env.NOTIFICATIONS_EMAIL_PROVIDER}`);
+  }
+  if (!env.NOTIFICATIONS_EMAIL_SENDGRID_API_KEY) {
+    throw new Error('NOTIFICATIONS_EMAIL_SENDGRID_API_KEY is required for SendGrid email notifications');
+  }
+
+  return {
+    provider: 'sendgrid',
+    apiKey: env.NOTIFICATIONS_EMAIL_SENDGRID_API_KEY,
+    sender: env.NOTIFICATIONS_EMAIL_FROM,
+  };
+}
+
+function resolveWhatsAppConfig(env: ReturnType<typeof getEnv>): WhatsAppNotificationAdapterConfig {
+  if (env.NOTIFICATIONS_WHATSAPP_PROVIDER !== 'twilio') {
+    throw new Error(`Unsupported WhatsApp provider: ${env.NOTIFICATIONS_WHATSAPP_PROVIDER}`);
+  }
+  if (!env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID || !env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN) {
+    throw new Error('Twilio credentials are required for WhatsApp notifications');
+  }
+  if (!env.NOTIFICATIONS_WHATSAPP_FROM) {
+    throw new Error('NOTIFICATIONS_WHATSAPP_FROM must be configured for WhatsApp notifications');
+  }
+
+  const rateLimit = Number.parseInt(env.NOTIFICATIONS_WHATSAPP_RATE_LIMIT_PER_SECOND, 10);
+
+  return {
+    provider: 'twilio',
+    accountSid: env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID,
+    authToken: env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN,
+    from: env.NOTIFICATIONS_WHATSAPP_FROM,
+    rateLimitPerSecond: Number.isFinite(rateLimit) && rateLimit >= 0 ? rateLimit : 1,
+  };
+}
+
+function parseList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function storeDispatchResult(result: NotificationDispatchResult) {
+  state.dispatchResults.push(result);
+  if (state.dispatchResults.length > 100) {
+    state.dispatchResults.shift();
+  }
 }
 
 function buildEmailMessage(event: NotificationEventNormalized): EmailMessage | null {

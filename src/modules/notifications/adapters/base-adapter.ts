@@ -8,12 +8,13 @@ export abstract class BaseNotificationAdapter<TPayload> {
     private readonly metrics: NotificationMetrics,
   ) {}
 
-  protected async executeWithMetrics(handler: () => Promise<void>) {
+  protected async executeWithMetrics<TResult>(handler: () => Promise<TResult>): Promise<TResult> {
     const start = performance.now();
     try {
-      await handler();
+      const result = await handler();
       const durationMs = performance.now() - start;
       this.metrics.recordSuccess(this.channel, durationMs);
+      return result;
     } catch (error) {
       this.metrics.recordFailure(this.channel);
       throw error;
