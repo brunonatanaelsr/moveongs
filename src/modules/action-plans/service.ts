@@ -264,14 +264,30 @@ export async function updateActionItem(params: {
   completedAt?: string | null;
   userId?: string | null;
 }): Promise<ActionPlanRecord> {
-  const dueDate = params.dueDate ? new Date(params.dueDate) : undefined;
-  if (dueDate && Number.isNaN(dueDate.getTime())) {
-    throw new AppError('Invalid dueDate', 400);
+  let dueDate: Date | null | undefined;
+  if (params.dueDate !== undefined) {
+    if (params.dueDate === null) {
+      dueDate = null;
+    } else {
+      const parsedDueDate = new Date(params.dueDate);
+      if (Number.isNaN(parsedDueDate.getTime())) {
+        throw new AppError('Invalid dueDate', 400);
+      }
+      dueDate = parsedDueDate;
+    }
   }
 
-  const completedAt = params.completedAt ? new Date(params.completedAt) : undefined;
-  if (completedAt && Number.isNaN(completedAt.getTime())) {
-    throw new AppError('Invalid completedAt', 400);
+  let completedAt: Date | null | undefined;
+  if (params.completedAt !== undefined) {
+    if (params.completedAt === null) {
+      completedAt = null;
+    } else {
+      const parsedCompletedAt = new Date(params.completedAt);
+      if (Number.isNaN(parsedCompletedAt.getTime())) {
+        throw new AppError('Invalid completedAt', 400);
+      }
+      completedAt = parsedCompletedAt;
+    }
   }
 
   const itemBefore = await getActionItemById(params.itemId);
@@ -279,17 +295,40 @@ export async function updateActionItem(params: {
     throw new AppError('Action item not found', 404);
   }
 
-  const plan = await updateActionItemRepository({
+  const repositoryPayload: Parameters<typeof updateActionItemRepository>[0] = {
     actionPlanId: params.actionPlanId,
     itemId: params.itemId,
-    title: params.title,
-    responsible: params.responsible ?? null,
-    dueDate: dueDate ?? null,
-    status: params.status,
-    support: params.support ?? null,
-    notes: params.notes ?? null,
-    completedAt: completedAt ?? null,
-  });
+  };
+
+  if (params.title !== undefined) {
+    repositoryPayload.title = params.title;
+  }
+
+  if (params.responsible !== undefined) {
+    repositoryPayload.responsible = params.responsible;
+  }
+
+  if (dueDate !== undefined) {
+    repositoryPayload.dueDate = dueDate;
+  }
+
+  if (params.status !== undefined) {
+    repositoryPayload.status = params.status;
+  }
+
+  if (params.support !== undefined) {
+    repositoryPayload.support = params.support;
+  }
+
+  if (params.notes !== undefined) {
+    repositoryPayload.notes = params.notes;
+  }
+
+  if (completedAt !== undefined) {
+    repositoryPayload.completedAt = completedAt;
+  }
+
+  const plan = await updateActionItemRepository(repositoryPayload);
 
   const updatedItem = plan.items.find((item) => item.id === params.itemId) ?? null;
 
