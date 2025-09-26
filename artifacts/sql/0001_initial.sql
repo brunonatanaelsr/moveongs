@@ -219,10 +219,18 @@ CREATE TABLE certificates (
 
 CREATE INDEX certificates_enrollment_id_idx ON certificates(enrollment_id);
 
--- Funções e permissões
+CREATE TABLE resources (
+  id SERIAL PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
   description TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -230,26 +238,33 @@ CREATE TABLE roles (
 
 CREATE TABLE permissions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL UNIQUE,
+  resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'global',
   description TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (resource_id, action, scope)
 );
 
 CREATE TABLE role_permissions (
-  role_id UUID NOT NULL REFERENCES roles(id),
-  permission_id UUID NOT NULL REFERENCES permissions(id),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (role_id, permission_id)
+  UNIQUE (role_id, permission_id)
 );
 
 CREATE TABLE user_roles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id),
   role_id UUID NOT NULL REFERENCES roles(id),
   project_id UUID REFERENCES projects(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (user_id, role_id, project_id)
+  UNIQUE (user_id, role_id, project_id)
 );
 
+CREATE INDEX permissions_resource_scope_idx ON permissions(resource_id, action, scope);
+CREATE INDEX role_permissions_role_idx ON role_permissions(role_id);
 CREATE INDEX user_roles_project_id_idx ON user_roles(project_id);
 
 -- Views para análise
