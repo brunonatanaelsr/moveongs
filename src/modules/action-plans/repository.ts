@@ -267,29 +267,45 @@ export async function updateActionItem(params: {
       throw new NotFoundError('Action item not found');
     }
 
-    await client.query(
-      `update action_items set
-         title = coalesce($3, title),
-         responsible = $4,
-         due_date = $5,
-         status = coalesce($6, status),
-         support = $7,
-         notes = $8,
-         completed_at = $9,
-         updated_at = now()
-       where id = $1 and action_plan_id = $2`,
-      [
-        params.itemId,
-        params.actionPlanId,
-        params.title ?? null,
-        params.responsible ?? null,
-        params.dueDate ?? null,
-        params.status ?? null,
-        params.support ?? null,
-        params.notes ?? null,
-        params.completedAt ?? null,
-      ],
-    );
+    const values: unknown[] = [params.itemId, params.actionPlanId];
+    const setClauses: string[] = ['updated_at = now()'];
+
+    const pushField = (field: string, value: unknown) => {
+      values.push(value);
+      setClauses.push(`${field} = $${values.length}`);
+    };
+
+    if (params.title !== undefined) {
+      pushField('title', params.title ?? null);
+    }
+
+    if (params.responsible !== undefined) {
+      pushField('responsible', params.responsible);
+    }
+
+    if (params.dueDate !== undefined) {
+      pushField('due_date', params.dueDate);
+    }
+
+    if (params.status !== undefined) {
+      pushField('status', params.status ?? null);
+    }
+
+    if (params.support !== undefined) {
+      pushField('support', params.support);
+    }
+
+    if (params.notes !== undefined) {
+      pushField('notes', params.notes);
+    }
+
+    if (params.completedAt !== undefined) {
+      pushField('completed_at', params.completedAt);
+    }
+
+    const sql = `update action_items set ${setClauses.join(', ')} where id = $1 and action_plan_id = $2`;
+
+    await client.query(sql, values);
   });
 
   const refreshed = await fetchPlanWithItems(params.actionPlanId);

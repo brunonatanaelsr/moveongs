@@ -152,4 +152,38 @@ describe('action plan service notifications', () => {
       expect.objectContaining({ type: 'action_item.overdue' }),
     );
   });
+
+  it('mantém dueDate e responsável quando não informados na atualização', async () => {
+    const existingItem = createItem({ id: 'item-5', dueDate: '2024-06-20', responsible: 'Responsável' });
+    getActionItemByIdMock.mockResolvedValue(existingItem);
+
+    const updatedPlan: ActionPlanRecord = {
+      ...basePlan,
+      items: [existingItem],
+    };
+
+    updateActionItemMock.mockResolvedValue(updatedPlan);
+
+    const result = await updateActionItem({
+      actionPlanId: basePlan.id,
+      itemId: existingItem.id,
+      status: 'in_progress',
+    });
+
+    expect(updateActionItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionPlanId: basePlan.id,
+        itemId: existingItem.id,
+        status: 'in_progress',
+      }),
+    );
+
+    const payload = updateActionItemMock.mock.calls[0][0];
+    expect(payload).not.toHaveProperty('dueDate');
+    expect(payload).not.toHaveProperty('responsible');
+
+    const updatedItem = result.items.find((item) => item.id === existingItem.id);
+    expect(updatedItem?.dueDate).toBe(existingItem.dueDate);
+    expect(updatedItem?.responsible).toBe(existingItem.responsible);
+  });
 });
