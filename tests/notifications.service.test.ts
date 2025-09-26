@@ -22,7 +22,13 @@ describe('notification service', () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://imm:test@localhost:5432/imm_test';
     process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-imm-123456789012345678901234567890';
     process.env.NOTIFICATIONS_EMAIL_RECIPIENTS = 'alerts@example.com';
+    process.env.NOTIFICATIONS_EMAIL_SES_REGION = 'sa-east-1';
+    process.env.NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID = 'test-access-key';
+    process.env.NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY = 'test-secret-key';
     process.env.NOTIFICATIONS_WHATSAPP_NUMBERS = '+5511999999999';
+    process.env.NOTIFICATIONS_WHATSAPP_FROM = 'whatsapp:+14155238886';
+    process.env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID = 'AC11111111111111111111111111111111';
+    process.env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN = 'test-twilio-token';
     process.env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS = '100';
     process.env.NOTIFICATIONS_WEBHOOK_SECRET = 'global-secret';
 
@@ -40,6 +46,21 @@ describe('notification service', () => {
     getNotificationDeadLetters = serviceModule.getNotificationDeadLetters;
     retryNotificationDeadLetter = serviceModule.retryNotificationDeadLetter;
     testingHarness = serviceModule.__testing;
+
+    vi.spyOn(testingHarness.emailClient, 'send').mockImplementation(async (command) => {
+      expect(command.input.Source).toBe('alerts@imm.local');
+      expect(command.input.Destination?.ToAddresses).toEqual(['alerts@example.com']);
+      expect(command.input.Message?.Subject?.Data).toBeDefined();
+      expect(command.input.Message?.Body?.Text?.Data).toBeDefined();
+      return { MessageId: 'ses-message-id', $metadata: { httpStatusCode: 200 } } as any;
+    });
+
+    vi.spyOn(testingHarness.whatsappClient.messages, 'create').mockImplementation(async (params) => {
+      expect(params.from).toBe('whatsapp:+14155238886');
+      expect(params.body).toBeDefined();
+      expect(params.to.startsWith('whatsapp:')).toBe(true);
+      return { sid: `SM${Math.random().toString(36).slice(2)}`, status: 'queued', to: params.to } as any;
+    });
 
     const registryModule = await import('../src/modules/notifications/webhook-registry');
     addWebhookSubscription = registryModule.addWebhookSubscription;
@@ -104,6 +125,7 @@ describe('notification service', () => {
       numbers: ['+5511999999999'],
       eventType: 'enrollment.created',
     });
+    expect(whatsappMessages[0].deliveries).toHaveLength(1);
 
     expect(fetchMock).toHaveBeenCalledWith('https://example.org/hooks/enrollments', expect.objectContaining({
       method: 'POST',

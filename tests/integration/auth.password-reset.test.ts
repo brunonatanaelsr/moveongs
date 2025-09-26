@@ -23,7 +23,13 @@ const { mem, adapter } = vi.hoisted(() => {
   process.env.DATABASE_URL = 'postgres://imm:test@localhost:5432/imm_test';
   process.env.LOG_LEVEL = 'debug';
   process.env.NOTIFICATIONS_EMAIL_RECIPIENTS = '';
+  process.env.NOTIFICATIONS_EMAIL_SES_REGION = 'us-east-1';
+  process.env.NOTIFICATIONS_EMAIL_SES_ACCESS_KEY_ID = 'test-access-key';
+  process.env.NOTIFICATIONS_EMAIL_SES_SECRET_ACCESS_KEY = 'test-secret-key';
   process.env.NOTIFICATIONS_WHATSAPP_NUMBERS = '';
+  process.env.NOTIFICATIONS_WHATSAPP_FROM = 'whatsapp:+14155238886';
+  process.env.NOTIFICATIONS_WHATSAPP_TWILIO_ACCOUNT_SID = 'AC11111111111111111111111111111111';
+  process.env.NOTIFICATIONS_WHATSAPP_TWILIO_AUTH_TOKEN = 'test-twilio-token';
   process.env.NOTIFICATIONS_WEBHOOK_TIMEOUT_MS = '100';
   return { mem: db, adapter };
 });
