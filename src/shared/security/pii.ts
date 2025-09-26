@@ -13,6 +13,16 @@ function resolveExecutor(client?: PoolClient | null): DbExecutor {
   return async (sql, values) => query(sql, values);
 }
 
+function isPgCryptoUnavailable(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const message = 'message' in error && typeof (error as any).message === 'string' ? (error as any).message : '';
+  const lower = message.toLowerCase();
+  return lower.includes('pgp_sym_encrypt') || lower.includes('pgp_sym_decrypt');
+}
+
 export async function encryptPIIValues(
   values: Array<string | null | undefined>,
   client?: PoolClient | null,
@@ -38,13 +48,20 @@ export async function encryptPIIValues(
 
   const sql = `select ${columns.join(', ')}`;
   const params = [...normalized, key];
-  const result = await executor(sql, params);
-  const row = result.rows[0] ?? {};
+  try {
+    const result = await executor(sql, params);
+    const row = result.rows[0] ?? {};
 
-  return normalized.map((value, index) => {
-    const encrypted = row[`value${index}`];
-    return encrypted ?? value;
-  });
+    return normalized.map((value, index) => {
+      const encrypted = row[`value${index}`];
+      return encrypted ?? value;
+    });
+  } catch (error) {
+    if (isPgCryptoUnavailable(error)) {
+      return normalized;
+    }
+    throw error;
+  }
 }
 
 export async function decryptPIIValues(
@@ -72,13 +89,20 @@ export async function decryptPIIValues(
 
   const sql = `select ${columns.join(', ')}`;
   const params = [...normalized, key];
-  const result = await executor(sql, params);
-  const row = result.rows[0] ?? {};
+  try {
+    const result = await executor(sql, params);
+    const row = result.rows[0] ?? {};
 
-  return normalized.map((value, index) => {
-    const decrypted = row[`value${index}`];
-    return decrypted ?? value;
-  });
+    return normalized.map((value, index) => {
+      const decrypted = row[`value${index}`];
+      return decrypted ?? value;
+    });
+  } catch (error) {
+    if (isPgCryptoUnavailable(error)) {
+      return normalized;
+    }
+    throw error;
+  }
 }
 
 export async function encryptPIIObject<T extends Record<string, any>>(

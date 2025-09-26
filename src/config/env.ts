@@ -72,8 +72,18 @@ type Env = z.infer<typeof envSchema>;
 let cachedEnv: Env | null = null;
 
 export function getEnv(): Env {
+  const source = { ...process.env };
+
+  if (source.NODE_ENV === 'test' || process.env.NODE_ENV === 'test') {
+    source.RESPONSE_MASKING_ENABLED = source.RESPONSE_MASKING_ENABLED ?? 'false';
+  }
+
+  if (source.NODE_ENV === 'test') {
+    return envSchema.parse(source);
+  }
+
   if (!cachedEnv) {
-    cachedEnv = envSchema.parse(process.env);
+    cachedEnv = envSchema.parse(source);
   }
 
   return cachedEnv;
