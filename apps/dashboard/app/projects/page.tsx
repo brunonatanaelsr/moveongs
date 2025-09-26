@@ -1,83 +1,75 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import useSWR from 'swr';
 import clsx from 'clsx';
 import { Shell } from '../../components/Shell';
 import { PrimarySidebar } from '../../components/PrimarySidebar';
 import { useRequirePermission } from '../../hooks/useRequirePermission';
-import { BENEFICIARIES, PROJECTS, INITIAL_FORM_SUBMISSIONS, ALL_FORM_SCHEMAS } from '../../data/mockOperations';
-import type { FormSubmission } from '../../data/mockOperations';
-import type { AttendanceRecord, ProjectSummary } from '../../types/operations';
-import { FormRenderer } from '../../components/FormRenderer';
-import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
 import { LoadingState } from '../../components/LoadingState';
+import {
+  listProjects,
+  listProjectCohorts,
+  listEnrollments,
+  updateEnrollment,
+  recordAttendance,
+  type ProjectRecord,
+  type CohortRecord,
+  type EnrollmentRecord,
+} from '../../lib/operations';
 
-interface EnrollmentListItem {
-  id: string;
-  projectId: string;
-  classroomId: string;
-  beneficiaryId: string;
-  beneficiaryName: string;
-  status: string;
-  startDate: string;
-}
-
-interface AttendanceEntry extends AttendanceRecord {
-  beneficiaryId: string;
-  beneficiaryName: string;
-  classroomId: string;
-}
-
-const enrollmentSchema = ALL_FORM_SCHEMAS.find((schema) => schema.id === 'form.inscricao_projeto');
-
-function getInitialEnrollments(): EnrollmentListItem[] {
-  return BENEFICIARIES.flatMap((beneficiary) =>
-    beneficiary.enrollments.map((enrollment) => ({
-      id: enrollment.id,
-      projectId: enrollment.projectId,
-      classroomId: enrollment.classroomId,
-      beneficiaryId: beneficiary.id,
-      beneficiaryName: beneficiary.name,
-      status: enrollment.status,
-      startDate: enrollment.startDate,
-    })),
-  );
-}
-
-function getInitialAttendance(): AttendanceEntry[] {
-  return BENEFICIARIES.flatMap((beneficiary) =>
-    Object.entries(beneficiary.attendance).flatMap(([classroomId, records]) =>
-      records.map((record) => ({
-        ...record,
-        beneficiaryId: beneficiary.id,
-        beneficiaryName: beneficiary.name,
-        classroomId,
-      })),
-    ),
-  );
-}
-
-function formatDate(dateIso: string) {
-  return new Date(dateIso).toLocaleDateString('pt-BR');
-}
-
-function computeAttendanceRate(records: AttendanceEntry[], classroomId: string, beneficiaryId: string) {
-  const scoped = records.filter((record) => record.classroomId === classroomId && record.beneficiaryId === beneficiaryId);
-  if (scoped.length === 0) return 1;
-  const presentes = scoped.filter((record) => record.status === 'presente').length;
-  return presentes / scoped.length;
-}
+type ProjectsResponse = ProjectRecord[];
+type CohortsResponse = CohortRecord[];
+type EnrollmentsResponse = { data: EnrollmentRecord[] };
 
 export default function ProjectsPage() {
   const session = useRequirePermission(['projects:read', 'projects:manage']);
-  const [enrollments, setEnrollments] = useState<EnrollmentListItem[]>(() => getInitialEnrollments());
-  const [attendance, setAttendance] = useState<AttendanceEntry[]>(() => getInitialAttendance());
-  const [submissions, setSubmissions] = useState<FormSubmission[]>(INITIAL_FORM_SUBMISSIONS);
-  const [selectedProjectId, setSelectedProjectId] = useState(PROJECTS[0]?.id ?? '');
-  const [selectedClassroomId, setSelectedClassroomId] = useState(PROJECTS[0]?.cohorts[0]?.id ?? '');
-  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
+  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
+  const [recordingAttendanceId, setRecordingAttendanceId] = useState<string | null>(null);
+
+  const projectsKey = useMemo(() => {
+    if (!session) return null;
+    return ['projects:list', session.token] as const;
+  }, [session]);
+
+  const {
+    data: projects,
+    error: projectsError,
+    isLoading: loadingProjects,
+  } = useSWR<ProjectsResponse>(projectsKey, ([, token]) => listProjects(token));
+
+  const activeProjectId = selectedProjectId ?? projects?.[0]?.id ?? null;
+
+  const cohortsKey = useMemo(() => {
+    if (!session || !activeProjectId) return null;
+    return ['projects:cohorts', activeProjectId, session.token] as const;
+  }, [session, activeProjectId]);
+
+  const { data: cohorts } = useSWR<CohortsResponse>(cohortsKey, ([, id, token]) => listProjectCohorts(id, token));
+
+  const enrollmentsKey = useMemo(() => {
+    if (!session || !activeProjectId) return null;
+    return [
+      'projects:enrollments',
+      activeProjectId,
+      selectedCohortId,
+      session.token,
+    ] as const;
+  }, [session, activeProjectId, selectedCohortId]);
+
+  const {
+    data: enrollments,
+    mutate: mutateEnrollments,
+    isLoading: loadingEnrollments,
+  } = useSWR<EnrollmentsResponse>(enrollmentsKey, ([, projectId, cohortId, token]) =>
+    listEnrollments({ projectId, cohortId: cohortId ?? undefined, limit: 100 }, token),
+  );
 
   if (session === undefined) {
     return <LoadingState message="Verificando sessão..." />;
@@ -87,411 +79,230 @@ export default function ProjectsPage() {
     return <LoadingState message="Carregando..." />;
   }
 
-  const selectedProject = PROJECTS.find((project) => project.id === selectedProjectId) ?? PROJECTS[0];
+  const handleUpdateEnrollment = async (enrollmentId: string, status: string) => {
+    if (!session) return;
 
-  const projectEnrollments = enrollments.filter((enrollment) => enrollment.projectId === selectedProject?.id);
-
-  const classroomEnrollments = projectEnrollments.filter((enrollment) =>
-    selectedClassroomId ? enrollment.classroomId === selectedClassroomId : true,
-  );
-
-  const beneficiariesWithoutEnrollment = BENEFICIARIES.filter(
-    (beneficiary) => !projectEnrollments.some((enrollment) => enrollment.beneficiaryId === beneficiary.id),
-  );
-
-  const availableClassrooms = selectedProject?.cohorts ?? [];
-
-  const enrollmentSuccessRate = selectedProject
-    ? projectEnrollments.filter((enrollment) => enrollment.status === 'ativa').length / selectedProject.capacity
-    : 0;
-
-  const handleEnrollmentSubmit = (data: Record<string, unknown>) => {
-    const beneficiaryName = String(data.nome ?? 'Beneficiária');
-    const beneficiary = BENEFICIARIES.find((item) => item.name === beneficiaryName);
-    const classroomLabel = String(data.turma ?? '');
-    const classroom = selectedProject?.cohorts.find((item) => classroomLabel.includes(item.name));
-
-    const enrollment: EnrollmentListItem = {
-      id: `enrollment-${Math.random().toString(36).slice(2, 8)}`,
-      projectId: selectedProject?.id ?? 'project-costura',
-      classroomId: classroom?.id ?? selectedProject?.cohorts[0]?.id ?? 'classroom-temp',
-      beneficiaryId: beneficiary?.id ?? `beneficiary-temp-${Date.now()}`,
-      beneficiaryName,
-      status: 'ativa',
-      startDate: new Date().toISOString(),
-    };
-
-    setEnrollments((prev) => [...prev, enrollment]);
-    if (enrollmentSchema) {
-      setSubmissions((prev) => [
-        ...prev,
-        {
-          id: `submission-${Math.random().toString(36).slice(2, 8)}`,
-          schemaId: enrollmentSchema.id,
-          schemaVersion: enrollmentSchema.version,
-          submittedAt: new Date().toISOString(),
-          submittedBy: session.user.name,
-          status: 'enviado',
-          payload: data,
-        },
-      ]);
+    setUpdatingEnrollmentId(enrollmentId);
+    try {
+      await updateEnrollment(enrollmentId, { status }, session.token);
+      await mutateEnrollments();
+      setFeedback('Matrícula atualizada com sucesso.');
+    } catch (error) {
+      console.error(error);
+      setFeedback('Não foi possível atualizar a matrícula.');
+    } finally {
+      setUpdatingEnrollmentId(null);
     }
-    setFeedback('Matrícula registrada com sucesso e formulário armazenado.');
-    setTimeout(() => setFeedback(null), 4000);
   };
 
-  const handleAttendanceSubmit = () => {
-    classroomEnrollments.forEach((enrollment) => {
-      const element = document.getElementById(`attendance-${enrollment.beneficiaryId}`) as HTMLSelectElement | null;
-      if (!element) return;
-      const status = element.value as AttendanceRecord['status'];
-      const justificationInput = document.getElementById(
-        `attendance-justification-${enrollment.beneficiaryId}`,
-      ) as HTMLInputElement | null;
-      const justification = justificationInput?.value ? justificationInput.value : undefined;
+  const handleRecordAttendance = async (enrollmentId: string, present: boolean) => {
+    if (!session) return;
 
-      const newEntry: AttendanceEntry = {
-        id: `att-${Math.random().toString(36).slice(2, 8)}`,
-        beneficiaryId: enrollment.beneficiaryId,
-        beneficiaryName: enrollment.beneficiaryName,
-        classroomId: enrollment.classroomId,
-        date: attendanceDate,
-        status,
-        justification: justification && justification.length > 0 ? justification : undefined,
-        recordedBy: session.user.name,
-      };
-
-      setAttendance((prev) => [...prev, newEntry]);
-    });
-    setFeedback('Presenças registradas e assiduidade recalculada.');
-    setTimeout(() => setFeedback(null), 4000);
+    setRecordingAttendanceId(enrollmentId);
+    try {
+      await recordAttendance(enrollmentId, { date: attendanceDate, present }, session.token);
+      setFeedback('Frequência registrada.');
+    } catch (error) {
+      console.error(error);
+      setFeedback('Não foi possível registrar a frequência.');
+    } finally {
+      setRecordingAttendanceId(null);
+    }
   };
 
   return (
     <Shell
-      title="Gestão de projetos e presenças"
-      description="Acompanhe capacidades, matrículas, assiduidade e formulários operacionais dos projetos do IMM."
+      title="Gestão de projetos"
+      description="Acompanhe matrículas e registre presenças das turmas."
       sidebar={<PrimarySidebar session={session} />}
     >
-      {feedback && (
-        <div className="rounded-3xl border border-emerald-300/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-          {feedback}
-        </div>
-      )}
-
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <ProjectHighlights
-          projects={PROJECTS}
-          selectedProject={selectedProject}
-          onSelect={setSelectedProjectId}
-          enrollmentRate={enrollmentSuccessRate}
-          enrollments={projectEnrollments.length}
-        />
-
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-          <h3 className="text-lg font-semibold text-white">Últimos formulários de inscrição</h3>
-          <p className="mt-1 text-sm text-white/70">Histórico das matrículas registradas pela equipe técnica.</p>
-          <ul className="mt-4 space-y-3">
-            {submissions
-              .filter((submission) => submission.schemaId === enrollmentSchema?.id)
-              .slice(-5)
-              .reverse()
-              .map((submission) => (
-                <li
-                  key={submission.id}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/70"
-                >
-                  <p className="font-semibold text-white">{formatDate(submission.submittedAt)}</p>
-                  <p className="mt-1">{submission.submittedBy}</p>
-                  <p className="mt-1 text-white/60">
-                    Campos preenchidos: {Object.keys(submission.payload).length}
-                  </p>
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-glass shadow-black/10">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/80">Projetos</h2>
+            {loadingProjects && <p className="mt-3 text-sm text-white/70">Carregando projetos...</p>}
+            {projectsError && <p className="mt-3 text-sm text-rose-300">Erro ao carregar projetos.</p>}
+            <ul className="mt-3 space-y-2">
+              {projects?.map((project) => (
+                <li key={project.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProjectId(project.id);
+                      setSelectedCohortId(null);
+                    }}
+                    className={clsx(
+                      'w-full rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-400',
+                      project.id === activeProjectId
+                        ? 'border-emerald-400/60 bg-emerald-500/10 text-white'
+                        : 'border-white/10 bg-white/5 text-white/80 hover:border-white/20 hover:bg-white/10',
+                    )}
+                  >
+                    <span className="block text-sm font-medium">{project.name}</span>
+                    {project.description && (
+                      <span className="mt-1 block text-xs text-white/60">{project.description}</span>
+                    )}
+                  </button>
                 </li>
               ))}
-          </ul>
-        </div>
-      </section>
+              {!loadingProjects && !projectsError && projects?.length === 0 && (
+                <li className="text-sm text-white/70">Nenhum projeto cadastrado.</li>
+              )}
+            </ul>
+          </div>
+        </aside>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-          <header className="space-y-1">
-            <h3 className="text-xl font-semibold text-white">Matrículas e acordos</h3>
-            <p className="text-sm text-white/70">
-              Preencha o formulário oficial de inscrição para confirmar participação nas turmas selecionadas e registrar acordos
-              de convivência.
-            </p>
-          </header>
-          {enrollmentSchema ? (
-            <FormRenderer schema={enrollmentSchema} onSubmit={handleEnrollmentSubmit} submitLabel="Registrar matrícula" />
-          ) : (
-            <p className="text-sm text-white/60">Schema de inscrição não encontrado.</p>
+        <section className="space-y-4">
+          {feedback && (
+            <div className="rounded-3xl border border-emerald-300/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+              {feedback}
+            </div>
           )}
-        </div>
 
-        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-          <header className="space-y-1">
-            <h3 className="text-xl font-semibold text-white">Controle de frequência</h3>
-            <p className="text-sm text-white/70">
-              Registre presenças, ausências justificadas e acompanhe a assiduidade média de cada beneficiária na turma.
-            </p>
-          </header>
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
+            <header className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold text-white">{projects?.find((p) => p.id === activeProjectId)?.name ?? 'Projeto'}</h2>
+                <p className="mt-1 text-sm text-white/70">
+                  Gerencie matrículas e presença das turmas vinculadas a este projeto.
+                </p>
+              </div>
+              <div className="space-y-2 text-sm text-white/70">
+                <label className="block text-xs uppercase tracking-wide text-white/60">Data de registro</label>
+                <Input
+                  type="date"
+                  value={attendanceDate}
+                  onChange={(event) => setAttendanceDate(event.target.value)}
+                  className="w-48"
+                />
+              </div>
+            </header>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-2 text-sm font-medium text-slate-200">
-              Turma
-              <select
-                value={selectedClassroomId}
-                onChange={(event) => setSelectedClassroomId(event.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-white focus:border-cyan-300 focus:outline-none"
-              >
-                {availableClassrooms.map((cohort) => (
-                  <option key={cohort.id} value={cohort.id}>
-                    {cohort.name} • {cohort.schedule}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Input
-              type="date"
-              label="Data do encontro"
-              value={attendanceDate}
-              onChange={(event) => setAttendanceDate(event.target.value)}
-            />
-          </div>
-
-          <div className="space-y-3">
-            {classroomEnrollments.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
-                Nenhuma beneficiária matriculada nesta turma.
-              </p>
-            )}
-
-            {classroomEnrollments.map((enrollment) => {
-              const rate = computeAttendanceRate(attendance, enrollment.classroomId, enrollment.beneficiaryId);
-              return (
-                <div
-                  key={enrollment.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 md:flex-row md:items-center md:justify-between"
+            <section className="mt-6 space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-white/60">Turmas</span>
+                <button
+                  type="button"
+                  className={clsx(
+                    'rounded-full px-3 py-1 text-xs transition',
+                    selectedCohortId === null
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-white/10 text-white/70 hover:bg-white/20',
+                  )}
+                  onClick={() => setSelectedCohortId(null)}
                 >
-                  <div>
-                    <p className="text-base font-semibold text-white">{enrollment.beneficiaryName}</p>
-                    <p className="text-xs text-white/60">
-                      Início em {formatDate(enrollment.startDate)} · Assiduidade: {(rate * 100).toFixed(0)}%
-                    </p>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
-                    <select
-                      id={`attendance-${enrollment.beneficiaryId}`}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-white focus:border-cyan-300 focus:outline-none md:max-w-[180px]"
-                      defaultValue="presente"
-                    >
-                      <option value="presente">Presente</option>
-                      <option value="ausente">Ausente</option>
-                      <option value="justificado">Justificada</option>
-                    </select>
-                    <Input
-                      id={`attendance-justification-${enrollment.beneficiaryId}`}
-                      label="Justificativa (opcional)"
-                      placeholder="Descreva a justificativa"
-                    />
-                  </div>
+                  Todas
+                </button>
+                {cohorts?.map((cohort) => (
+                  <button
+                    key={cohort.id}
+                    type="button"
+                    className={clsx(
+                      'rounded-full px-3 py-1 text-xs transition',
+                      cohort.id === selectedCohortId
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-white/10 text-white/70 hover:bg-white/20',
+                    )}
+                    onClick={() => setSelectedCohortId(cohort.id)}
+                  >
+                    {cohort.name}
+                  </button>
+                ))}
+              </div>
+
+              {loadingEnrollments ? (
+                <p className="text-sm text-white/70">Carregando matrículas...</p>
+              ) : enrollments?.data?.length ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-white/10 text-sm text-white/80">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-2 text-left font-semibold text-white">Beneficiária</th>
+                        <th className="px-4 py-2 text-left font-semibold text-white">Turma</th>
+                        <th className="px-4 py-2 text-left font-semibold text-white">Status</th>
+                        <th className="px-4 py-2 text-left font-semibold text-white">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {enrollments.data.map((enrollment) => (
+                        <EnrollmentRow
+                          key={enrollment.id}
+                          enrollment={enrollment}
+                          cohorts={cohorts ?? []}
+                          onUpdateStatus={handleUpdateEnrollment}
+                          onRecordAttendance={handleRecordAttendance}
+                          updating={updatingEnrollmentId === enrollment.id}
+                          recording={recordingAttendanceId === enrollment.id}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              );
-            })}
+              ) : (
+                <p className="text-sm text-white/70">Nenhuma matrícula encontrada para este filtro.</p>
+              )}
+            </section>
           </div>
-
-          <div className="flex justify-end">
-            <Button onClick={handleAttendanceSubmit}>Salvar frequência</Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        <EnrollmentTable enrollments={projectEnrollments} project={selectedProject} attendance={attendance} />
-        <BeneficiaryPipeline
-          beneficiaries={beneficiariesWithoutEnrollment.map((beneficiary) => beneficiary.name)}
-          project={selectedProject}
-        />
-      </section>
+        </section>
+      </div>
     </Shell>
   );
 }
 
-interface ProjectHighlightsProps {
-  projects: ProjectSummary[];
-  selectedProject?: ProjectSummary;
-  onSelect: (projectId: string) => void;
-  enrollmentRate: number;
-  enrollments: number;
+interface EnrollmentRowProps {
+  enrollment: EnrollmentRecord;
+  cohorts: CohortRecord[];
+  updating: boolean;
+  recording: boolean;
+  onUpdateStatus: (id: string, status: string) => Promise<void>;
+  onRecordAttendance: (id: string, present: boolean) => Promise<void>;
 }
 
-function ProjectHighlights({ projects, selectedProject, onSelect, enrollmentRate, enrollments }: ProjectHighlightsProps) {
+function EnrollmentRow({
+  enrollment,
+  cohorts,
+  updating,
+  recording,
+  onUpdateStatus,
+  onRecordAttendance,
+}: EnrollmentRowProps) {
+  const cohort = cohorts.find((item) => item.id === enrollment.cohortId);
+
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-      <header className="space-y-1">
-        <h3 className="text-xl font-semibold text-white">Projetos ativos</h3>
-        <p className="text-sm text-white/70">Selecione um projeto para visualizar turmas, matrículas e capacidade.</p>
-      </header>
-      <ul className="mt-4 space-y-3">
-        {projects.map((project) => {
-          const isActive = selectedProject?.id === project.id;
-          return (
-            <li key={project.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(project.id)}
-                className={clsx(
-                  'w-full rounded-3xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/30 hover:bg-white/10',
-                  isActive && 'border-cyan-300/60 bg-cyan-500/10 shadow-glass',
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-white">{project.name}</p>
-                    <p className="text-xs uppercase tracking-[0.2em] text-white/50">{project.focus}</p>
-                  </div>
-                  <span className="text-xs text-white/60">{project.capacity} vagas</span>
-                </div>
-                <p className="mt-3 text-sm text-white/70">{project.description}</p>
-                <div className="mt-4 grid gap-2 text-xs text-white/60 md:grid-cols-3">
-                  <p>
-                    Matrículas ativas:
-                    <span className="ml-1 font-semibold text-white">{project.activeEnrollments}</span>
-                  </p>
-                  <p>
-                    Alertas de risco:
-                    <span className="ml-1 font-semibold text-amber-200">{project.riskAlerts}</span>
-                  </p>
-                  <p>
-                    Assiduidade média:
-                    <span className="ml-1 font-semibold text-emerald-200">{(project.attendanceRate * 100).toFixed(0)}%</span>
-                  </p>
-                </div>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {selectedProject && (
-        <div className="mt-6 rounded-2xl border border-cyan-300/40 bg-cyan-500/10 p-4 text-sm text-cyan-100">
-          <p className="font-semibold text-white">{selectedProject.name}</p>
-          <p className="mt-1 text-xs text-white/80">
-            {enrollments} matrículas acompanhadas · {selectedProject.cohorts.length} turmas em operação
-          </p>
-          <p className="mt-2 text-xs text-white/70">
-            Taxa de preenchimento da capacidade: {(enrollmentRate * 100).toFixed(1)}%
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface EnrollmentTableProps {
-  enrollments: EnrollmentListItem[];
-  project?: ProjectSummary;
-  attendance: AttendanceEntry[];
-}
-
-function EnrollmentTable({ enrollments, project, attendance }: EnrollmentTableProps) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-      <header className="space-y-1">
-        <h3 className="text-xl font-semibold text-white">Matrículas por turma</h3>
-        <p className="text-sm text-white/70">
-          Acompanhe o status das beneficiárias nas turmas do projeto selecionado e identifique quedas de assiduidade.
-        </p>
-      </header>
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-left text-sm text-white/80">
-          <thead>
-            <tr className="text-xs uppercase tracking-wider text-white/60">
-              <th className="pb-2 pr-4">Beneficiária</th>
-              <th className="pb-2 pr-4">Turma</th>
-              <th className="pb-2 pr-4">Início</th>
-              <th className="pb-2 pr-4">Status</th>
-              <th className="pb-2 pr-4">Assiduidade</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/10">
-            {enrollments.map((enrollment) => {
-              const cohort = project?.cohorts.find((item) => item.id === enrollment.classroomId);
-              const records = attendance.filter(
-                (record) => record.beneficiaryId === enrollment.beneficiaryId && record.classroomId === enrollment.classroomId,
-              );
-              const attended = records.filter((record) => record.status === 'presente').length;
-              const percent = records.length > 0 ? Math.round((attended / records.length) * 100) : 100;
-              return (
-                <tr key={enrollment.id}>
-                  <td className="py-2 pr-4 text-white">{enrollment.beneficiaryName}</td>
-                  <td className="py-2 pr-4">{cohort ? cohort.name : enrollment.classroomId}</td>
-                  <td className="py-2 pr-4">{formatDate(enrollment.startDate)}</td>
-                  <td className="py-2 pr-4 capitalize">{enrollment.status}</td>
-                  <td className="py-2 pr-4">
-                    <span
-                      className={clsx(
-                        'rounded-xl px-3 py-1 text-xs font-semibold',
-                        percent >= 75 ? 'bg-emerald-500/20 text-emerald-100' : 'bg-rose-500/20 text-rose-100',
-                      )}
-                    >
-                      {percent}%
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-interface BeneficiaryPipelineProps {
-  beneficiaries: string[];
-  project?: ProjectSummary;
-}
-
-function BeneficiaryPipeline({ beneficiaries, project }: BeneficiaryPipelineProps) {
-  return (
-    <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-glass shadow-black/10">
-      <header className="space-y-1">
-        <h3 className="text-xl font-semibold text-white">Fila de espera e triagem</h3>
-        <p className="text-sm text-white/70">
-          Beneficiárias com perfil aderente que ainda não iniciaram o processo de matrícula no projeto selecionado.
-        </p>
-      </header>
-      <ul className="space-y-3">
-        {beneficiaries.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm text-white/60">
-            Todas as beneficiárias ativas já estão matriculadas neste projeto.
-          </li>
-        )}
-        {beneficiaries.map((beneficiary) => (
-          <li
-            key={beneficiary}
-            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80"
+    <tr className="align-top">
+      <td className="px-4 py-3">
+        <div className="font-medium text-white">{enrollment.beneficiaryId}</div>
+        <div className="text-xs text-white/50">Início {enrollment.startDate ? new Date(enrollment.startDate).toLocaleDateString('pt-BR') : '—'}</div>
+      </td>
+      <td className="px-4 py-3 text-sm text-white/70">{cohort?.name ?? 'Turma'}</td>
+      <td className="px-4 py-3 text-sm text-white/70">{enrollment.status}</td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={updating}
+            onClick={() => onUpdateStatus(enrollment.id, enrollment.status === 'ativa' ? 'desligada' : 'ativa')}
           >
-            <div>
-              <p className="font-semibold text-white">{beneficiary}</p>
-              <p className="text-xs text-white/60">Triagem concluída · Documentação validada</p>
-            </div>
-            <Button variant="secondary" size="sm">
-              Agendar matrícula
-            </Button>
-          </li>
-        ))}
-      </ul>
-      {project && (
-        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-xs text-white/70">
-          <p className="font-semibold text-white">Próximos passos recomendados</p>
-          <ul className="mt-2 space-y-1 list-disc pl-4">
-            <li>Confirmar disponibilidade de vagas na turma {project.cohorts[0]?.name ?? ''}.</li>
-            <li>Verificar consentimentos LGPD antes do início das atividades.</li>
-            <li>Enviar comunicado de boas-vindas via mensagens internas.</li>
-          </ul>
+            {updating ? 'Atualizando...' : enrollment.status === 'ativa' ? 'Desligar' : 'Reativar'}
+          </Button>
+          <Button
+            size="sm"
+            disabled={recording}
+            onClick={() => onRecordAttendance(enrollment.id, true)}
+          >
+            {recording ? 'Registrando...' : 'Presença'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={recording}
+            onClick={() => onRecordAttendance(enrollment.id, false)}
+          >
+            {recording ? 'Registrando...' : 'Falta'}
+          </Button>
         </div>
-      )}
-    </div>
+      </td>
+    </tr>
   );
 }

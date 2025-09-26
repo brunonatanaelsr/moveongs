@@ -33,16 +33,6 @@ export async function fetchJson(path: string, params: Record<string, unknown> = 
   return response.text();
 }
 
-export async function postJson(path: string, body: unknown, token?: string | null) {
-  const url = `${API_URL}${path}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: 'include',
-    body: JSON.stringify(body ?? {}),
   });
 
   if (!response.ok) {
